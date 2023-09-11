@@ -52,6 +52,7 @@ func main() {
 
 func (tb *TestBed) start(time uint) {
 	for i := 0; i < len(tb.workers); i++ {
+		log.Default().Printf("worker %d started", i)
 		go tb.workers[i].cfxCal(time)
 	}
 

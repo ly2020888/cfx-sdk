@@ -65,7 +65,7 @@ func (woker *Worker) updateAccount() {
 func (woker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, num int) {
 	//A账户到B账户
 	tmp := big.NewInt(int64(num))
-	value := tmp.Mul(tmp, big.NewInt(1000000000000000*1000)) //1CFX
+	value := tmp.Mul(tmp, big.NewInt(1e3)) //1CFX
 	res := (*hexutil.Big)(value)
 	//解锁两个账户
 	//	fmt.Println("查看大小： ", len(am.List()))
@@ -74,7 +74,7 @@ func (woker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, num int) {
 	am.Unlock(cfx2, "hello")
 	start := time.Now()
 	//创建未签名的交易
-	utx, err := woker.client.CreateUnsignedTransaction(cfx1, cfx2, res, nil) //from, err := client.AccountManger()
+	utx, _ := woker.client.CreateUnsignedTransaction(cfx1, cfx2, res, nil) //from, err := client.AccountManger()
 
 	if err != nil {
 		panic(err)
@@ -97,7 +97,6 @@ func (worker *Worker) random_transfer(timeLimit uint, num int) int {
 	//打乱账户顺序，交易金额为num
 
 	lst := am.List()
-	fmt.Println(len(lst))
 	//从几号节点开始
 	startPerr := 4
 	subLst := make([]types.Address, len(lst)-startPerr)
@@ -117,6 +116,7 @@ func (worker *Worker) random_transfer(timeLimit uint, num int) int {
 		select {
 		case <-C:
 			*worker.sinal <- 1
+			log.Default().Printf("worker exited.")
 			return total
 		default:
 			from := rand.Int() % len(subLst)
@@ -152,7 +152,6 @@ func (woker *Worker) allocation(num int) {
 	account := make([]types.Address, num)
 	copy(account, am.List()[:num])
 	sz := len(lst)
-	fmt.Println("debug : ", sz)
 	for i := 0; i < num; i++ {
 		fmt.Println(account[i].GetHexAddress())
 		adtmp := account[i]
@@ -163,9 +162,8 @@ func (woker *Worker) allocation(num int) {
 			if woker.GetBalance(woker.address, adtmp) < numcfx+10 {
 				break
 			}
-			fmt.Println("目前账户余额: ", woker.GetBalance(woker.address, adtmp))
 			woker.transfer(adtmp, lst[j], numcfx)
-			fmt.Println("实现转账 : ", adtmp, lst[j])
+
 		}
 	}
 }
