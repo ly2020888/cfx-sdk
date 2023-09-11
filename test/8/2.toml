@@ -1,0 +1,40 @@
+bootnodes="cfxnode://655022398d5720c350c9c0a5a821b7a29ac7e7da5ef5f364edc6b2f613522329825e4c1eacf164d475fdbfaa26895d848d7d4c1eb91d07de5ddc173623ddabc8@cfx-1:7001"
+                     
+mode = "test"
+#dev_block_interval_ms = 250
+log_conf = "log.yaml"
+public_address="127.0.0.1"
+mining_type = "cpu"
+
+jsonrpc_ws_port=12535
+jsonrpc_tcp_port=12536
+jsonrpc_http_port=12537
+jsonrpc_local_tcp_port=12538
+jsonrpc_local_http_port=12539
+jsonrpc_local_ws_port=12540
+jsonrpc_http_eth_port=8545
+jsonrpc_ws_eth_port=8546
+public_rpc_apis = "all"
+
+initial_difficulty=1
+session_ip_limits="0,0,0,0"
+
+min_phase_change_normal_peer_count=1
+#dev_allow_phase_change_without_peer=true
+tcp_port=7002
+
+
+mining_author = "0x13fc84cfd7165b0ea1daf58aa36e7945946a0b14"
+mining_key = "0x6b365b5101c63af32b2b65e40467491c885d2b307502719a8242afb2a61f1ab3"
+genesis_secrets = "./genesis_secret.txt"
+
+
+
+chain_id = 1234
+node_table_promotion_timeout_s = 1
+evm_chain_id = 1030
+hydra_transition_number = 92060600
+hydra_transition_height = 36935000
+cip43_init_end_number = 92751800
+pos_reference_enable_height = 37400000
+

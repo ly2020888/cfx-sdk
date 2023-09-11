@@ -1,0 +1,37 @@
+mode = "test"
+dev_block_interval_ms = 250
+log_conf = "log.yaml"
+mining_type = "cpu"
+
+public_address="127.0.0.1"
+
+jsonrpc_ws_port=12535
+jsonrpc_tcp_port=12536
+jsonrpc_http_port=12537
+jsonrpc_local_tcp_port=12538
+jsonrpc_local_http_port=12539
+jsonrpc_local_ws_port=12540
+jsonrpc_http_eth_port=8545
+jsonrpc_ws_eth_port=8546
+tcp_port=7001
+public_rpc_apis = "all"
+
+initial_difficulty=1
+session_ip_limits="0,0,0,0"
+
+min_phase_change_normal_peer_count=1
+#dev_allow_phase_change_without_peer=true
+
+
+mining_author = "0x13bde97788d306ebe99962a24955c6fb59f342d0"
+mining_key = "0xdc780c521c32237b3e44a2f3796d1e0f7ca0fe47d78df321814ee4e8091b4e68"
+genesis_secrets = "./genesis_secret.txt"
+
+chain_id = 1234
+evm_chain_id = 1030
+get_logs_filter_max_limit = 5000
+node_table_promotion_timeout_s = 1
+hydra_transition_number = 92060600
+hydra_transition_height = 36935000
+cip43_init_end_number = 92751800
+pos_reference_enable_height = 37400000

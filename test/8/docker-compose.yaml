@@ -1,0 +1,157 @@
+networks:
+  test:
+    name: mynodes
+
+services:
+
+  node1:
+    container_name: cfx-1
+    image: confluxchain/conflux-rust:latest
+    ports:
+      - "7001:7001"
+      - "12001:12535"
+      - "13001:12536"
+      - "14001:12537"
+      - "15001:12538"
+      - "16001:12539"
+      - "17001:12540"
+      - "8101:8545"
+      - "8201:8546"
+    volumes:
+        - ./1.toml:/root/run/conflux.toml
+        - ./genesis_secret.txt:/root/run/genesis_secret.txt
+    networks:
+      - test
+
+  node2:
+    container_name: cfx-2
+    image: confluxchain/conflux-rust:latest
+    ports:
+      - "7002:7002"
+      - "12002:12535"
+      - "13002:12536"
+      - "14002:12537"
+      - "15002:12538"
+      - "16002:12539"
+      - "17002:12540"
+      - "8102:8545"
+      - "8202:8546"
+    volumes:
+        - ./2.toml:/root/run/conflux.toml
+        - ./genesis_secret.txt:/root/run/genesis_secret.txt
+    networks:
+      - test
+
+  node3:
+    container_name: cfx-3
+    image: confluxchain/conflux-rust:latest
+    ports:
+      - "7003:7003"
+      - "12003:12535"
+      - "13003:12536"
+      - "14003:12537"
+      - "15003:12538"
+      - "16003:12539"
+      - "17003:12540"
+      - "8103:8545"
+      - "8203:8546"
+    volumes:
+      - ./3.toml:/root/run/conflux.toml
+      - ./genesis_secret.txt:/root/run/genesis_secret.txt
+
+    networks:
+      - test
+
+  node4:
+    container_name: cfx-4
+    image: confluxchain/conflux-rust:latest
+    ports:
+      - "7004:7004"
+      - "12004:12535"
+      - "13004:12536"
+      - "14004:12537"
+      - "15004:12538"
+      - "16004:12539"
+      - "17004:12540"
+      - "8104:8545"
+      - "8204:8546"
+    volumes:
+      - ./4.toml:/root/run/conflux.toml
+      - ./genesis_secret.txt:/root/run/genesis_secret.txt
+    networks:
+      - test
+  node5:
+    container_name: cfx-5
+    image: confluxchain/conflux-rust:latest
+    ports:
+      - "7005:7005"
+      - "12005:12535"
+      - "13005:12536"
+      - "14005:12537"
+      - "15005:12538"
+      - "16005:12539"
+      - "17005:12540"
+      - "8105:8545"
+      - "8205:8546"
+    volumes:
+      - ./5.toml:/root/run/conflux.toml
+      - ./genesis_secret.txt:/root/run/genesis_secret.txt
+    networks:
+      - test
+
+  node6:
+    container_name: cfx-6
+    image: confluxchain/conflux-rust:latest
+    ports:
+      - "7006:7006"
+      - "12006:12535"
+      - "13006:12536"
+      - "14006:12537"
+      - "15006:12538"
+      - "16006:12539"
+      - "17006:12540"
+      - "8106:8545"
+      - "8206:8546"
+    volumes:
+      - ./6.toml:/root/run/conflux.toml
+      - ./genesis_secret.txt:/root/run/genesis_secret.txt
+    networks:
+      - test
+
+  node7:
+    container_name: cfx-7
+    image: confluxchain/conflux-rust:latest
+    ports:
+      - "7007:7007"
+      - "12007:12535"
+      - "13007:12536"
+      - "14007:12537"
+      - "15007:12538"
+      - "16007:12539"
+      - "17007:12540"
+      - "8107:8545"
+      - "8207:8546"
+    volumes:
+      - ./7.toml:/root/run/conflux.toml
+      - ./genesis_secret.txt:/root/run/genesis_secret.txt
+    networks:
+      - test
+
+  node8:
+    container_name: cfx-8
+    image: confluxchain/conflux-rust:latest
+    ports:
+      - "7008:7008"
+      - "12008:12535"
+      - "13008:12536"
+      - "14008:12537"
+      - "15008:12538"
+      - "16008:12539"
+      - "17008:12540"
+      - "8108:8545"
+      - "8208:8546"
+    volumes:
+      - ./8.toml:/root/run/conflux.toml
+      - ./genesis_secret.txt:/root/run/genesis_secret.txt
+    networks:
+      - test
