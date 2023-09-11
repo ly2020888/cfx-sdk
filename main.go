@@ -46,7 +46,7 @@ func main() {
 		//给账户分发钱
 	}
 	//挖矿节点有config.Numbers个，然后直接分发金额
-	tb.workers[0].allocation(config.Numbers)
+	// tb.workers[0].allocation(config.Numbers)
 	tb.start(config.Time)
 } //
 

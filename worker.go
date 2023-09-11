@@ -76,6 +76,9 @@ func (woker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, num int) {
 	//创建未签名的交易
 	utx, err := woker.client.CreateUnsignedTransaction(cfx1, cfx2, res, nil) //from, err := client.AccountManger()
 
+	if err != nil {
+		panic(err)
+	}
 	//txhash, err := client.SendTransaction(utx)//输出交易的哈希值
 
 	//对未签名的交易进行签名
