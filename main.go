@@ -43,11 +43,12 @@ func main() {
 			client:  client,
 			sinal:   &tb.sinal,
 		})
-
+		//给账户分发钱
 	}
-
+	//挖矿节点有config.Numbers个，然后直接分发金额
+	tb.workers[0].allocation(config.Numbers)
 	tb.start(config.Time)
-}
+} //
 
 func (tb *TestBed) start(time uint) {
 	for i := 0; i < len(tb.workers); i++ {

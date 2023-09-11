@@ -1,8 +1,10 @@
 urls: 
       - "http://localhost:14001"
-      # - "http://localhost:14002"
-      # - "http://localhost:14003"
-numbers: 5
+      - "http://localhost:14002"
+      - "http://localhost:14003"
+      - "http://localhost:14004"
+      
+numbers: 4
 rate: 0
 time: 20
-peers: 1
+peers: 4
