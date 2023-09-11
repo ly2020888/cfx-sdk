@@ -23,7 +23,7 @@ func NewConfig() Config {
 		panic(fmt.Errorf("fatal error config file: %s", err))
 	}
 	if err != nil {
-		fmt.Println("导出数据有误", err.Error())
+		panic(fmt.Errorf("导出数据有误", err.Error()))
 	}
 
 	log.Default().Print("配置文件加载成功")

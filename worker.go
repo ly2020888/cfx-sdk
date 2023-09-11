@@ -41,7 +41,7 @@ func (woker *Worker) addToDir(privateKey string) {
 func (woker *Worker) GetBalance(url string, addres types.Address) int {
 	balance, _ := woker.client.GetBalance(addres)
 	dec, err := hexutil.DecodeBig(balance.String())
-	dec = dec.Div(dec, big.NewInt(1000000000000000*1000))
+	dec = dec.Div(dec, big.NewInt(1e3))
 	if err != nil {
 		panic(err)
 	}
@@ -74,7 +74,7 @@ func (woker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, num int) {
 	am.Unlock(cfx2, "hello")
 	start := time.Now()
 	//创建未签名的交易
-	utx, _ := woker.client.CreateUnsignedTransaction(cfx1, cfx2, res, nil) //from, err := client.AccountManger()
+	utx, err := woker.client.CreateUnsignedTransaction(cfx1, cfx2, res, nil) //from, err := client.AccountManger()
 
 	if err != nil {
 		panic(err)
@@ -152,8 +152,10 @@ func (woker *Worker) allocation(num int) {
 	account := make([]types.Address, num)
 	copy(account, am.List()[:num])
 	sz := len(lst)
-	for i := 0; i < num; i++ {
-		fmt.Println(account[i].GetHexAddress())
+
+	var sinal chan int = make(chan int, 1)
+
+	var allo = func(i int) {
 		adtmp := account[i]
 		tmp := woker.GetBalance(woker.address, adtmp)
 		numcfx := tmp / (sz + 5)
@@ -163,7 +165,20 @@ func (woker *Worker) allocation(num int) {
 				break
 			}
 			woker.transfer(adtmp, lst[j], numcfx)
+		}
+		sinal <- 1
 
+	}
+
+	for i := 0; i < num; i++ {
+		go allo(i)
+	}
+	counter := 0
+	for {
+		counter += <-sinal
+		log.Default().Printf("allocation thread %d 's work has done", counter)
+		if counter > num-1 {
+			break
 		}
 	}
 }
