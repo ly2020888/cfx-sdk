@@ -15,8 +15,7 @@ var (
 )
 
 const (
-	KEYDIR  string = "./keystore"
-	BALANCE int    = 21
+	KEYDIR string = "./keystore"
 	//21是燃油费 -> 0.000021CFX
 )
 
@@ -35,7 +34,7 @@ func main() {
 		sinal:   make(chan int, 1),
 		counter: 0,
 	}
-	for i := 0; i < len(config.Urls); i++ {
+	for i := 0; i < config.Numbers; i++ {
 		client, _ := sdk.NewClient(config.Urls[i])
 		log.Default().Printf("%v", config.Urls[i])
 		am = sdk.NewAccountManager(KEYDIR, 1234)
@@ -52,15 +51,14 @@ func main() {
 		})
 		//给账户分发钱
 	}
+
+	for i := 0; i < len(tb.workers); i++ {
+		tb.workers[i].unlock()
+
+	}
 	//挖矿节点有config.Numbers个，然后直接分发金额
 	//一个账号初始化时转给100，那么每个账户得到的钱是：  节点数 * 100
-	// tb.workers[0].allocation(config.Numbers, 100)
-	/*
-		cfx8 := cfxaddress.MustNew("0x1ebfeac86d8e997f768547a189fc30dc4b1b4dee")
-		cfx10 := cfxaddress.MustNew("0x1f3f2e2abcc09653e3b03be9428f19f25472f38b")
-		tb.workers[0].transfer(cfx8, cfx10, BALANCE)
-	*/
-	// tb.workers[0].GetBalance(config.Urls[0], cfxaddress.MustNewFromHex("0x1e77b924efe10e49c7e9d9989adedfe41c8f2d38", 1234))
+	tb.workers[0].allocation(config.Numbers, 100)
 	tb.start(config.Time)
 } //
 
