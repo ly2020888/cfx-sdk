@@ -9,6 +9,7 @@ import (
 	"time"
 
 	sdk "github.com/Conflux-Chain/go-conflux-sdk"
+	"github.com/Conflux-Chain/go-conflux-sdk/cfxclient/bulk"
 	"github.com/Conflux-Chain/go-conflux-sdk/types"
 	"github.com/Conflux-Chain/go-conflux-sdk/types/cfxaddress"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -16,33 +17,38 @@ import (
 
 const DEBUG = 1
 const CFX1 = 1000000000000000 * 1000 / 1000000 //(1CFX / 1e6) 为单位
+const CONCURRENCY int = 20
+const BATCHSIZE int = 100
 
 type Worker struct {
-	address string
-	rate    int
-	client  *sdk.Client
-	sinal   *chan int
+	address    string
+	rate       int
+	client     *sdk.Client
+	sinal      *chan int
+	froms      []cfxaddress.Address
+	tos        []cfxaddress.Address
+	bulkSender *bulk.BulkSender
 }
 
-func (woker *Worker) cfxCal(timeLimit uint) int {
+func (worker *Worker) cfxCal(timeLimit uint) int {
 
-	res := woker.random_transfer(timeLimit, BALANCE)
+	res := worker.random_transfer(timeLimit, BALANCE)
 
-	fmt.Println("id: " + woker.address + "     交易次数:  " + strconv.Itoa(res))
+	fmt.Println("id: " + worker.address + "     交易次数:  " + strconv.Itoa(res))
 	return res
 }
 
-func (woker *Worker) addToDir(privateKey string) {
+func (worker *Worker) addToDir(privateKey string) {
 	//	fmt.Println(len(am.List())) 获取账号个数
-	cfx1, err := woker.client.AccountManager.ImportKey(privateKey, "hello")
+	cfx1, err := worker.client.AccountManager.ImportKey(privateKey, "hello")
 	log.Default().Println(cfx1)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (woker *Worker) GetBalance(url string, addres types.Address) int {
-	balance, _ := woker.client.GetBalance(addres)
+func (worker *Worker) GetBalance(url string, addres types.Address) int {
+	balance, _ := worker.client.GetBalance(addres)
 	dec, err := hexutil.DecodeBig(balance.String())
 	//为了转换为CFX进行了除以1e3的运算，具体可以输出dec然后对照钱包余额自己推公式
 	dec = dec.Div(dec, big.NewInt(1e3))
@@ -59,7 +65,7 @@ func (woker *Worker) GetBalance(url string, addres types.Address) int {
 
 }
 
-func (woker *Worker) updateAccount() {
+func (worker *Worker) updateAccount() {
 	address := cfxaddress.MustNewFromHex("0x1e77b924efe10e49c7e9d9989adedfe41c8f2d38", 1234)
 	err := am.Update(address, KEYDIR, "hello")
 	if err != nil {
@@ -69,38 +75,47 @@ func (woker *Worker) updateAccount() {
 	fmt.Printf("update address %v done\n\n", address)
 }
 
-func (woker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, num int) {
-	//A账户到B账户
-	tmp := big.NewInt(int64(num))
-	value := tmp.Mul(tmp, big.NewInt(CFX1)) //1CFX
-	res := (*hexutil.Big)(value)
-	//解锁两个账户
-	//	fmt.Println("查看大小： ", len(am.List()))
-	woker.client.SetAccountManager(am)
-	am.Unlock(cfx1, "hello")
-	am.Unlock(cfx2, "hello")
-	start := time.Now()
-	//创建未签名的交易
-	utx, err := woker.client.CreateUnsignedTransaction(cfx1, cfx2, res, nil) //from, err := client.AccountManger()
+func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, num int) {
 
-	if err != nil {
-		panic(err)
-	}
-	//txhash, err := client.SendTransaction(utx)//输出交易的哈希值
+	if len(worker.froms) < BATCHSIZE {
+		worker.froms = append(worker.froms, cfx1)
+		worker.tos = append(worker.froms, cfx2)
+	} else {
+		// unlock
+		for _, user := range worker.froms {
+			worker.client.AccountManager.Unlock(user, "hello")
+		}
 
-	//对未签名的交易进行签名
-	txhash, err := woker.client.SendTransaction(utx)
-	//	fmt.Println(cfx1, " -> ", cfx2, " : 交易哈希为 ： ", txhash)
-	elapsed := time.Since(start)
-	duration := time.Duration(elapsed) * time.Nanosecond // 将纳秒转换为 time.Duration 类型
-	TotalTime += duration.Seconds()                      //以秒为单位
-	//	fmt.Printf("send transaction hash: %v\n\n", txhash)
-	if err != nil {
-		panic(err)
+		tmp := big.NewInt(int64(num))
+		value := tmp.Mul(tmp, big.NewInt(CFX1)) //1CFX
+		res := (*hexutil.Big)(value)
+
+		for i := 0; i < len(worker.froms); i++ {
+			//创建未签名的交易
+			utx, err := worker.client.CreateUnsignedTransaction(worker.froms[i], worker.tos[i], res, nil)
+			if err != nil {
+				panic(err)
+			}
+			nonce, _ := worker.client.TxPool().NextNonce(cfx1)
+			utx.Nonce = nonce
+			worker.bulkSender.AppendTransaction(&utx)
+		}
+
+		worker.clearCache()
+		hashes, errors, err := worker.bulkSender.SignAndSend()
+		worker.froms = make([]cfxaddress.Address, 0)
+		if err != nil {
+			panic(fmt.Sprintf("%+v", err))
+		}
+		for i := 0; i < len(hashes); i++ {
+			if errors[i] != nil {
+				log.Default().Printf("sign and send the %vth tx error %v\n", i, errors[i])
+			} else {
+				log.Default().Printf("the %vth tx hash %v\n", i, hashes[i])
+			}
+		}
 	}
-	if txhash == "" {
-		fmt.Println("交易失败")
-	}
+
 }
 
 func (worker *Worker) random_transfer(timeLimit uint, num int) int {
@@ -117,36 +132,26 @@ func (worker *Worker) random_transfer(timeLimit uint, num int) int {
 	rand.Shuffle(len(subLst), func(i, j int) {
 		subLst[i], subLst[j] = subLst[j], subLst[i]
 	})
-	total := 0
-	InOneSecond := 0
+	var total int = 0
 	C := time.After(time.Duration(timeLimit) * time.Second)
 
+	var trans = func(from int, to int) {
+		worker.transfer(subLst[from], subLst[to], num)
+		log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
+		total++
+
+	}
+
 	for {
-		startTime := time.Now()
 		select {
 		case <-C:
-			*worker.sinal <- 1
+			*worker.sinal <- int(total)
 			log.Default().Printf("worker exited.")
-			return total
+			return int(total)
 		default:
 			from := rand.Int() % len(subLst)
 			to := rand.Int() % len(subLst)
-			worker.transfer(subLst[from], subLst[to], num)
-			//log.Default().Printf("转账前  %v   %v \n", worker.GetBalance(worker.address, subLst[from]), worker.GetBalance(worker.address, subLst[to]))
-			log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
-			//	log.Default().Printf("转账后  %v   %v", worker.GetBalance(worker.address, subLst[from]), worker.GetBalance(worker.address, subLst[to]))
-
-			total++
-
-			InOneSecond++
-			if InOneSecond >= worker.rate && worker.rate != 0 { // rate == 0, no limits
-				now := time.Now()
-				limitTime := startTime.Add(1 * time.Second)
-				if limitTime.Sub(now) > 0 {
-					time.Sleep(limitTime.Sub(now))
-					InOneSecond = 0
-				}
-			}
+			trans(from, to)
 		}
 
 	}
@@ -155,7 +160,7 @@ func (worker *Worker) random_transfer(timeLimit uint, num int) int {
 
 // 账户的金额分配
 
-func (woker *Worker) allocation(num int, money int) {
+func (worker *Worker) allocation(num int, money int) {
 	//几个节点-num就是几
 	//num : 2 4 8 16
 	if money == -1 {
@@ -170,15 +175,15 @@ func (woker *Worker) allocation(num int, money int) {
 
 		var allo = func(i int) {
 			adtmp := account[i]
-			tmp := woker.GetBalance(woker.address, adtmp)
+			tmp := worker.GetBalance(worker.address, adtmp)
 			numcfx := tmp / (sz + 5)
 			// 不均分保证有足够的gas
 			for j := 0; j < sz; j++ {
-				if woker.GetBalance(woker.address, adtmp) < numcfx+10 {
+				if worker.GetBalance(worker.address, adtmp) < numcfx+10 {
 					break
 				}
 				fmt.Println("尝试进行交易: ", adtmp, " -> ", lst[j])
-				woker.transfer(adtmp, lst[j], numcfx*1000000)
+				worker.transfer(adtmp, lst[j], numcfx*1000000)
 			}
 			sinal <- 1
 
@@ -208,11 +213,11 @@ func (woker *Worker) allocation(num int, money int) {
 		var allo = func(i int) {
 			adtmp := account[i]
 			//自己给出money值，保证程序能够正确执行且各个账户余额足够交易
-			woker.GetBalance(woker.address, adtmp)
+			worker.GetBalance(worker.address, adtmp)
 
 			for j := 0; j < sz; j++ {
 				fmt.Println("尝试进行交易: ", adtmp, " -> ", lst[j])
-				woker.transfer(adtmp, lst[j], money*1000000)
+				worker.transfer(adtmp, lst[j], money*1000000)
 			}
 			sinal <- 1
 
@@ -231,4 +236,8 @@ func (woker *Worker) allocation(num int, money int) {
 		}
 	}
 
+}
+func (worker *Worker) clearCache() {
+	worker.froms = make([]cfxaddress.Address, 0)
+	worker.tos = make([]cfxaddress.Address, 0)
 }

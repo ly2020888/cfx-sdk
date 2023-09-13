@@ -1,6 +1,7 @@
 # github.com/Conflux-Chain/go-conflux-sdk v1.5.8
 ## explicit; go 1.17
 github.com/Conflux-Chain/go-conflux-sdk
+github.com/Conflux-Chain/go-conflux-sdk/cfxclient/bulk
 github.com/Conflux-Chain/go-conflux-sdk/constants
 github.com/Conflux-Chain/go-conflux-sdk/light/bcs
 github.com/Conflux-Chain/go-conflux-sdk/types
