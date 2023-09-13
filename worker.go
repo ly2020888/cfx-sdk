@@ -24,6 +24,7 @@ const (
 )
 
 var singleTransfer *hexutil.Big = (*hexutil.Big)(big.NewInt(BALANCE * CFX1)) //1CFX
+var invalidTransactions uint = 0
 
 type Worker struct {
 	address    string
@@ -86,12 +87,15 @@ func (worker *Worker) updateAccount() {
 func (woker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
 
 	utx, err := woker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
+	// nonce, err := woker.client.GetNextUsableNonce(cfx1)
+	// utx.Nonce = nonce
 	if err != nil {
 		fmt.Printf("%v", err)
 	}
 	_, err = woker.client.SendTransaction(utx)
 	if err != nil {
 		fmt.Printf("%v", err)
+		invalidTransactions++
 	}
 }
 
