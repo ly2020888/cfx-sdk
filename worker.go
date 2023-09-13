@@ -15,10 +15,15 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
-const DEBUG = 1
-const CFX1 = 1000000000000000 * 1000 / 1000000 //(1CFX / 1e6) 为单位
-const CONCURRENCY int = 20
-const BATCHSIZE int = 100
+const (
+	DEBUG       int   = 1
+	CFX1        int64 = 1e18 / 1e6 //(1CFX / 1e6) 为单位
+	CONCURRENCY int   = 20
+	BATCHSIZE   int   = 100
+	BALANCE     int64 = 21
+)
+
+var singleTransfer *hexutil.Big = (*hexutil.Big)(big.NewInt(BALANCE * CFX1)) //1CFX
 
 type Worker struct {
 	address    string
@@ -30,9 +35,15 @@ type Worker struct {
 	bulkSender *bulk.BulkSender
 }
 
+func (worker *Worker) unlock() {
+	log.Default().Println("worker is unlocking the accounts")
+	for _, user := range am.List() {
+		worker.client.AccountManager.Unlock(user, "hello")
+	}
+}
 func (worker *Worker) cfxCal(timeLimit uint) int {
 
-	res := worker.random_transfer(timeLimit, BALANCE)
+	res := worker.random_transfer(timeLimit)
 
 	fmt.Println("id: " + worker.address + "     交易次数:  " + strconv.Itoa(res))
 	return res
@@ -52,9 +63,6 @@ func (worker *Worker) GetBalance(url string, addres types.Address) int {
 	dec, err := hexutil.DecodeBig(balance.String())
 	//为了转换为CFX进行了除以1e3的运算，具体可以输出dec然后对照钱包余额自己推公式
 	dec = dec.Div(dec, big.NewInt(1e3))
-	if DEBUG == 1 {
-		//	fmt.Println("drip 单位 : ", addres, "  : ", dec)
-	}
 	if err != nil {
 		panic(err)
 	}
@@ -75,29 +83,31 @@ func (worker *Worker) updateAccount() {
 	fmt.Printf("update address %v done\n\n", address)
 }
 
-func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, num int) {
+func (woker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
+
+	utx, err := woker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+	_, err = woker.client.SendTransaction(utx)
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+}
+
+func (worker *Worker) BatchTransfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
 
 	if len(worker.froms) < BATCHSIZE {
 		worker.froms = append(worker.froms, cfx1)
 		worker.tos = append(worker.froms, cfx2)
 	} else {
-		// unlock
-		for _, user := range worker.froms {
-			worker.client.AccountManager.Unlock(user, "hello")
-		}
-
-		tmp := big.NewInt(int64(num))
-		value := tmp.Mul(tmp, big.NewInt(CFX1)) //1CFX
-		res := (*hexutil.Big)(value)
 
 		for i := 0; i < len(worker.froms); i++ {
 			//创建未签名的交易
-			utx, err := worker.client.CreateUnsignedTransaction(worker.froms[i], worker.tos[i], res, nil)
+			utx, err := worker.client.CreateUnsignedTransaction(worker.froms[i], worker.tos[i], value, nil)
 			if err != nil {
-				panic(err)
+				continue
 			}
-			nonce, _ := worker.client.TxPool().NextNonce(cfx1)
-			utx.Nonce = nonce
 			worker.bulkSender.AppendTransaction(&utx)
 		}
 
@@ -118,7 +128,7 @@ func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, num int) 
 
 }
 
-func (worker *Worker) random_transfer(timeLimit uint, num int) int {
+func (worker *Worker) random_transfer(timeLimit uint) int {
 	//打乱账户顺序，交易金额为num
 
 	lst := am.List()
@@ -136,7 +146,7 @@ func (worker *Worker) random_transfer(timeLimit uint, num int) int {
 	C := time.After(time.Duration(timeLimit) * time.Second)
 
 	var trans = func(from int, to int) {
-		worker.transfer(subLst[from], subLst[to], num)
+		worker.transfer(subLst[from], subLst[to], singleTransfer)
 		log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
 		total++
 
@@ -177,13 +187,16 @@ func (worker *Worker) allocation(num int, money int) {
 			adtmp := account[i]
 			tmp := worker.GetBalance(worker.address, adtmp)
 			numcfx := tmp / (sz + 5)
-			// 不均分保证有足够的gas
+			fees := big.NewInt(int64(numcfx * 1000000))
+			fees.Mul(fees, big.NewInt(CFX1))
+
 			for j := 0; j < sz; j++ {
 				if worker.GetBalance(worker.address, adtmp) < numcfx+10 {
 					break
 				}
 				fmt.Println("尝试进行交易: ", adtmp, " -> ", lst[j])
-				worker.transfer(adtmp, lst[j], numcfx*1000000)
+
+				worker.transfer(adtmp, lst[j], (*hexutil.Big)(fees))
 			}
 			sinal <- 1
 
@@ -214,10 +227,11 @@ func (worker *Worker) allocation(num int, money int) {
 			adtmp := account[i]
 			//自己给出money值，保证程序能够正确执行且各个账户余额足够交易
 			worker.GetBalance(worker.address, adtmp)
-
+			fees := big.NewInt(int64(money * 1000000))
+			fees.Mul(fees, big.NewInt(CFX1))
 			for j := 0; j < sz; j++ {
 				fmt.Println("尝试进行交易: ", adtmp, " -> ", lst[j])
-				worker.transfer(adtmp, lst[j], money*1000000)
+				worker.transfer(adtmp, lst[j], (*hexutil.Big)(fees))
 			}
 			sinal <- 1
 
