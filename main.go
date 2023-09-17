@@ -37,6 +37,7 @@ func main() {
 	for i := 0; i < config.Numbers; i++ {
 		client, _ := sdk.NewClient(config.Urls[i])
 		log.Default().Printf("%v", config.Urls[i])
+
 		am = sdk.NewAccountManager(KEYDIR, 1234)
 		client.SetAccountManager(am) //设置对应节点的账号管理器
 
@@ -62,12 +63,13 @@ func main() {
 } //
 
 func (tb *TestBed) start(time1 uint) {
-	startTime := time.Now()
 
 	for i := 0; i < len(tb.workers); i++ {
 		log.Default().Printf("worker %d started", i)
 		go tb.workers[i].cfxCal(time1)
 	}
+	startTime := time.Now()
+
 	totalTransactions := 0
 	for {
 		totalTransactions += <-tb.sinal // 收到wokrer结束信号
