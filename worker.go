@@ -92,7 +92,7 @@ func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *he
 	}
 	_, err = worker.client.SendTransaction(utx)
 	if err != nil {
-		fmt.Printf("%v", err)
+		fmt.Println(err)
 		invalidTransactions++
 	}
 }

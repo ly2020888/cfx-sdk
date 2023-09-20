@@ -62,7 +62,6 @@ func main() {
 			tos:        make([]cfxaddress.Address, 0),
 		})
 		tb.workers[i].client.SetAccountManager(am)
-		//给账户分发钱
 	}
 
 	/*
@@ -88,12 +87,13 @@ func main() {
 }
 
 func (tb *TestBed) start(time1 uint) {
-	startTime := time.Now()
 
 	for i := 0; i < len(tb.workers); i++ {
 		log.Default().Printf("worker %d started", i)
 		go tb.workers[i].cfxCal(time1, int(NewConfig().Peers))
 	}
+	startTime := time.Now()
+
 	totalTransactions := 0
 	for {
 		totalTransactions += <-tb.sinal // 收到wokrer结束信号
