@@ -42,10 +42,9 @@ func (worker *Worker) unlock() {
 		worker.client.AccountManager.Unlock(user, "hello")
 	}
 }
-func (worker *Worker) cfxCal(timeLimit uint) int {
-
-	res := worker.random_transfer(timeLimit)
-
+func (worker *Worker) cfxCal(timeLimit uint, startPeer int) int {
+	//worker.client.SetAccountManager(am)
+	res := worker.random_transfer(timeLimit, startPeer)
 	fmt.Println("id: " + worker.address + "     交易次数:  " + strconv.Itoa(res))
 	return res
 }
@@ -84,15 +83,14 @@ func (worker *Worker) updateAccount() {
 	fmt.Printf("update address %v done\n\n", address)
 }
 
-func (woker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
-
-	utx, err := woker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
-	// nonce, err := woker.client.GetNextUsableNonce(cfx1)
-	// utx.Nonce = nonce
+func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
+	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
+	//nonce, err := worker.client.GetNextUsableNonce(cfx1)
+	//	utx.Nonce = nonce
 	if err != nil {
 		fmt.Printf("%v", err)
 	}
-	_, err = woker.client.SendTransaction(utx)
+	_, err = worker.client.SendTransaction(utx)
 	if err != nil {
 		fmt.Printf("%v", err)
 		invalidTransactions++
@@ -132,14 +130,13 @@ func (worker *Worker) BatchTransfer(cfx1 types.Address, cfx2 types.Address, valu
 
 }
 
-func (worker *Worker) random_transfer(timeLimit uint) int {
+func (worker *Worker) random_transfer(timeLimit uint, startPeer int) int {
 	//打乱账户顺序，交易金额为num
 
 	lst := am.List()
 	//从几号节点开始
-	startPerr := 4
-	subLst := make([]types.Address, len(lst)-startPerr)
-	copy(subLst, lst[startPerr:])
+	subLst := make([]types.Address, len(lst)-startPeer)
+	copy(subLst, lst[startPeer:])
 	//对lst实现随机洗牌-打乱顺序
 	rand.Seed(time.Now().UnixNano())
 	// 注意，这行重要，为了使每次洗牌的结果不一样，需要用不同的随机种子，我们这里用精确到微秒的时间戳
@@ -177,6 +174,7 @@ func (worker *Worker) random_transfer(timeLimit uint) int {
 func (worker *Worker) allocation(num int, money int) {
 	//几个节点-num就是几
 	//num : 2 4 8 16
+	worker.client.SetAccountManager(am)
 	if money == -1 {
 		all := am.List()
 		lst := make([]types.Address, len(all)-num)

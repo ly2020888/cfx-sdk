@@ -65,29 +65,30 @@ type ClientOption struct {
 }
 
 // NewClient creates an instance of Client with specified conflux node url, it will creat account manager if option.KeystorePath not empty.
-// 	client, err := sdk.NewClient("https://test.confluxrpc.com", sdk.ClientOption{
-// 	    KeystorePath: "your keystore folder path",
-// 		RetryCount	: 3,
-// 	})
+//
+//	client, err := sdk.NewClient("https://test.confluxrpc.com", sdk.ClientOption{
+//	    KeystorePath: "your keystore folder path",
+//		RetryCount	: 3,
+//	})
 //	// query rpc
-// 	epoch, err := client.GetEpochNumber()
-// 	if err != nil {
-// 		panic(err)
-// 	}
+//	epoch, err := client.GetEpochNumber()
+//	if err != nil {
+//		panic(err)
+//	}
 //	// send transaction
-// 	chainID, err := client.GetNetworkID()
-// 	if err!=nil {
-// 	    panic(err)
-// 	}
-// 	from, err :=client.AccountManger().GetDefault()
-// 	if err!=nil {
-// 	    panic(err)
-// 	}
-// 	utx, err := client.CreateUnsignedTransaction(*from, cfxaddress.MustNewFromHex("0x1cad0b19bb29d4674531d6f115237e16afce377d", chainID), types.NewBigInt(1), nil)
-// 	if err!=nil {
-// 	    panic(err)
-// 	}
-// 	txhash, err := client.SendTransaction(utx)
+//	chainID, err := client.GetNetworkID()
+//	if err!=nil {
+//	    panic(err)
+//	}
+//	from, err :=client.AccountManger().GetDefault()
+//	if err!=nil {
+//	    panic(err)
+//	}
+//	utx, err := client.CreateUnsignedTransaction(*from, cfxaddress.MustNewFromHex("0x1cad0b19bb29d4674531d6f115237e16afce377d", chainID), types.NewBigInt(1), nil)
+//	if err!=nil {
+//	    panic(err)
+//	}
+//	txhash, err := client.SendTransaction(utx)
 func NewClient(nodeURL string, option ...ClientOption) (*Client, error) {
 	realOption := ClientOption{}
 	if len(option) > 0 {
