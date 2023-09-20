@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"math/rand"
 	"strconv"
+	"sync"
 	"time"
 
 	sdk "github.com/Conflux-Chain/go-conflux-sdk"
@@ -25,6 +26,11 @@ const (
 
 var singleTransfer *hexutil.Big = (*hexutil.Big)(big.NewInt(BALANCE * CFX1)) //1CFX
 var invalidTransactions uint = 0
+var onChain uint = 0
+var totalCounter uint = 0
+var mutexTotalCounter sync.Mutex
+var autoNonce *big.Int
+var mutexAtuoNoncer sync.Mutex
 
 type Worker struct {
 	address    string
@@ -34,6 +40,7 @@ type Worker struct {
 	froms      []cfxaddress.Address
 	tos        []cfxaddress.Address
 	bulkSender *bulk.BulkSender
+	pastTime   float64
 }
 
 func (worker *Worker) unlock() {
@@ -42,8 +49,9 @@ func (worker *Worker) unlock() {
 		worker.client.AccountManager.Unlock(user, "hello")
 	}
 }
-func (worker *Worker) cfxCal(timeLimit uint, startPeer int) int {
+func (worker *Worker) cfxCal(timeLimit float64, startPeer int) int {
 	//worker.client.SetAccountManager(am)
+	autoNonce = big.NewInt(0)
 	res := worker.random_transfer(timeLimit, startPeer)
 	fmt.Println("id: " + worker.address + "     交易次数:  " + strconv.Itoa(res))
 	return res
@@ -84,9 +92,19 @@ func (worker *Worker) updateAccount() {
 }
 
 func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
+	//开始计时
+
+	//mutexAtuoNoncer.Lock()
+	//autoNonce.Add(autoNonce, big.NewInt(1))
+	//tmp := autoNonce
+	//	atuoNonce++
+	//mutexAtuoNoncer.Unlock()
+
+	begin := time.Now()
 	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
-	//nonce, err := worker.client.GetNextUsableNonce(cfx1)
-	//	utx.Nonce = nonce
+	nonce, err := worker.client.GetNextUsableNonce(cfx1)
+	//	utx.Nonce.ToInt().Set(tmp)
+	utx.Nonce = nonce
 	if err != nil {
 		fmt.Printf("%v", err)
 	}
@@ -95,8 +113,35 @@ func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *he
 		fmt.Println(err)
 		invalidTransactions++
 	}
-}
 
+	elapsed := time.Since(begin)
+	worker.pastTime += elapsed.Seconds()
+
+	/*
+	   receipt, err := worker.client.GetTransactionReceipt(txhash)
+	   	if err != nil {
+	   		fmt.Println(err)
+	   	}
+	   	if receipt != nil {
+	   		onChain++
+	   	}
+	*/
+}
+func (worker *Worker) transfer2(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
+	//开始计时
+
+	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
+	//nonce, err := worker.client.GetNextUsableNonce(cfx1)
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+	_, err = worker.client.SendTransaction(utx)
+	if err != nil {
+		fmt.Println(err)
+		invalidTransactions++
+	}
+
+}
 func (worker *Worker) BatchTransfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
 
 	if len(worker.froms) < BATCHSIZE {
@@ -130,7 +175,7 @@ func (worker *Worker) BatchTransfer(cfx1 types.Address, cfx2 types.Address, valu
 
 }
 
-func (worker *Worker) random_transfer(timeLimit uint, startPeer int) int {
+func (worker *Worker) random_transfer(timeLimit float64, startPeer int) int {
 	//打乱账户顺序，交易金额为num
 
 	lst := am.List()
@@ -144,26 +189,30 @@ func (worker *Worker) random_transfer(timeLimit uint, startPeer int) int {
 		subLst[i], subLst[j] = subLst[j], subLst[i]
 	})
 	var total int = 0
-	C := time.After(time.Duration(timeLimit) * time.Second)
-
+	//	C := time.After(time.Duration(timeLimit) * time.Second)
+	//begin := time.Now()
 	var trans = func(from int, to int) {
 		worker.transfer(subLst[from], subLst[to], singleTransfer)
 		log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
 		total++
+		mutexTotalCounter.Lock()
+		totalCounter++
+		mutexTotalCounter.Unlock()
+		//	elapsed := time.Since(begin)
+		log.Default().Printf("过去%v,  多节点总共完成%d笔交易\n", worker.pastTime, totalCounter)
 
 	}
 
 	for {
-		select {
-		case <-C:
+		if worker.pastTime > timeLimit {
 			*worker.sinal <- int(total)
 			log.Default().Printf("worker exited.")
 			return int(total)
-		default:
-			from := rand.Int() % len(subLst)
-			to := rand.Int() % len(subLst)
-			trans(from, to)
 		}
+
+		from := rand.Int() % len(subLst)
+		to := rand.Int() % len(subLst)
+		trans(from, to)
 
 	}
 
@@ -174,7 +223,7 @@ func (worker *Worker) random_transfer(timeLimit uint, startPeer int) int {
 func (worker *Worker) allocation(num int, money int) {
 	//几个节点-num就是几
 	//num : 2 4 8 16
-	worker.client.SetAccountManager(am)
+	//	worker.client.SetAccountManager(am)
 	if money == -1 {
 		all := am.List()
 		lst := make([]types.Address, len(all)-num)
@@ -233,7 +282,7 @@ func (worker *Worker) allocation(num int, money int) {
 			fees.Mul(fees, big.NewInt(CFX1))
 			for j := 0; j < sz; j++ {
 				fmt.Println("尝试进行交易: ", adtmp, " -> ", lst[j])
-				worker.transfer(adtmp, lst[j], (*hexutil.Big)(fees))
+				worker.transfer2(adtmp, lst[j], (*hexutil.Big)(fees))
 			}
 			sinal <- 1
 

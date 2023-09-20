@@ -12,7 +12,7 @@ type Config struct {
 	Numbers     int      `yaml:"numbers"`
 	Rate        int      `yaml:"rate"`
 	Concurrency int      `yaml:"concurrency"`
-	Time        uint     `yaml:"time"`
+	Time        float64  `yaml:"time"`
 	Peers       uint     `yaml:"peers"`
 }
 

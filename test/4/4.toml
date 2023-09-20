@@ -1,4 +1,4 @@
-bootnodes="cfxnode://c1282e901ba9e72e6fd080ff5bf4ff6267bb0d196f9e56c995485b208368e7bcf6c94d90847a1988b357f627704bbd246284efcad5adc6c97954d7f3638a848b@cfx-1:7001"
+bootnodes="cfxnode://4afcfc08b4a81030b4ec0ab24ca8cd0a9159db48f7599f44bba247266562f1a4a7bacda5c505014244f7a09a50b9b04696e9ae0184277fb5c52e481fde26dff1@cfx-1:7001"
                      
 mode = "test"
 #dev_block_interval_ms = 250

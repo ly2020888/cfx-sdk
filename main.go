@@ -81,18 +81,19 @@ func main() {
 	*/
 	//挖矿节点有config.Numbers个，然后直接分发金额
 	//一个账号初始化时转给100，那么每个账户得到的钱是：  节点数 * 100
-	tb.workers[0].allocation(config.Numbers, 100)
+	//fmt.Println(len(am.List()))
+	//	tb.workers[0].allocation(config.Numbers, 100)
 	tb.start(config.Time)
 
 }
 
-func (tb *TestBed) start(time1 uint) {
+func (tb *TestBed) start(timeLimit float64) {
 
 	for i := 0; i < len(tb.workers); i++ {
 		log.Default().Printf("worker %d started", i)
-		go tb.workers[i].cfxCal(time1, int(NewConfig().Peers))
+		go tb.workers[i].cfxCal(timeLimit, int(NewConfig().Peers))
 	}
-	startTime := time.Now()
+	//startTime := time.Now()
 
 	totalTransactions := 0
 	for {
@@ -100,9 +101,13 @@ func (tb *TestBed) start(time1 uint) {
 		tb.counter++
 		if tb.counter >= len(tb.workers) {
 			log.Default().Printf("全部工人已经执行完工作\n")
-			now := time.Now()
-			t := now.Sub(startTime).Seconds()
-			log.Default().Printf("执行时间%f, 总计交易数量%d,不合法交易数量:%d,Tps:%f\n", t, totalTransactions, invalidTransactions, float64(totalTransactions)/t)
+			/*	t := 0.0
+				for i := 0; i < len(tb.workers); i++ {
+					t += float64(tb.workers[i].pastTime)
+				}
+			*/
+			t := timeLimit
+			log.Default().Printf("执行时间%f, 总计交易数量%d,不合法交易数量:%d,Tps:%f,  上链情况:%d\n", t, totalTransactions, invalidTransactions, float64(totalTransactions)/t, onChain)
 			return
 		}
 
