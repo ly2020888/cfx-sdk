@@ -197,9 +197,10 @@ func (worker *Worker) random_transfer(timeLimit float64, startPeer int) int {
 		total++
 		mutexTotalCounter.Lock()
 		totalCounter++
+		_, err = file.WriteString(fmt.Sprintf("过去%v,  多节点总共完成%d笔交易\n", worker.pastTime, totalCounter))
 		mutexTotalCounter.Unlock()
 		//	elapsed := time.Since(begin)
-		log.Default().Printf("过去%v,  多节点总共完成%d笔交易\n", worker.pastTime, totalCounter)
+		//	log.Default().Printf()
 
 	}
 

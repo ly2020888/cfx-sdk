@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -29,7 +30,15 @@ type TestBed struct {
 	counter int
 }
 
+var file, err = os.OpenFile(".//log.txt", os.O_WRONLY|os.O_CREATE, 0644)
+
 func main() {
+
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
 	config := NewConfig()
 	tb := TestBed{
 		conf:    config,
