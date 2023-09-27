@@ -82,7 +82,7 @@ func main() {
 	//挖矿节点有config.Numbers个，然后直接分发金额
 	//一个账号初始化时转给100，那么每个账户得到的钱是：  节点数 * 100
 	//fmt.Println(len(am.List()))
-	//	tb.workers[0].allocation(config.Numbers, 100)
+	tb.workers[0].allocation(config.Numbers, 100)
 	tb.start(config.Time)
 
 }

@@ -102,9 +102,9 @@ func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *he
 
 	begin := time.Now()
 	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
-	nonce, err := worker.client.GetNextUsableNonce(cfx1)
+	//nonce, err := worker.client.GetNextUsableNonce(cfx1)
 	//	utx.Nonce.ToInt().Set(tmp)
-	utx.Nonce = nonce
+	//utx.Nonce = nonce
 	if err != nil {
 		fmt.Printf("%v", err)
 	}
