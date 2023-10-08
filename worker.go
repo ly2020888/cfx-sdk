@@ -307,3 +307,12 @@ func (worker *Worker) clearCache() {
 	worker.froms = make([]cfxaddress.Address, 0)
 	worker.tos = make([]cfxaddress.Address, 0)
 }
+
+func (worker *Worker) GetAllBalance() {
+	lst := am.List()
+	for i := 0; i < len(lst); i++ {
+		num := worker.GetBalance(worker.address, lst[i])
+		log.Printf("账户%d, 目前有%v钱数\n", i, num)
+	}
+
+}

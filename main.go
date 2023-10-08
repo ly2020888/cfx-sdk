@@ -93,7 +93,18 @@ func main() {
 	//fmt.Println(len(am.List()))
 	tb.workers[0].allocation(config.Numbers, 100)
 	tb.start(config.Time)
+	time.Sleep(3 * time.Second)
+	tb.workers[0].randomtransfer()
+	time.Sleep(3 * time.Second)
+	tb.workers[0].randomtransfer()
+	time.Sleep(3 * time.Second)
+	tb.workers[0].randomtransfer()
+	time.Sleep(3 * time.Second)
+	tb.workers[0].randomtransfer()
+	time.Sleep(3 * time.Second)
+	tb.workers[0].randomtransfer()
 
+	//tb.workers[0].GetAllBalance()
 }
 
 func (tb *TestBed) start(timeLimit float64) {

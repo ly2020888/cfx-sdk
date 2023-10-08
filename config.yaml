@@ -3,7 +3,6 @@ urls:
       - "http://localhost:14002"
       - "http://localhost:14003"
       - "http://localhost:14004"
-
       
 numbers: 4
 rate: 0
