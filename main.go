@@ -9,7 +9,6 @@ import (
 	"time"
 
 	sdk "github.com/Conflux-Chain/go-conflux-sdk"
-	"github.com/Conflux-Chain/go-conflux-sdk/cfxclient/bulk"
 	"github.com/Conflux-Chain/go-conflux-sdk/types/cfxaddress"
 )
 
@@ -66,7 +65,7 @@ func main() {
 			rate:       config.Rate,
 			client:     client,
 			sinal:      &tb.sinal,
-			bulkSender: bulk.NewBulkSender(*client),
+//			bulkSender: bulk.NewBulkSender(*client),
 			froms:      make([]cfxaddress.Address, 0),
 			tos:        make([]cfxaddress.Address, 0),
 		})
@@ -91,7 +90,7 @@ func main() {
 	//挖矿节点有config.Numbers个，然后直接分发金额
 	//一个账号初始化时转给100，那么每个账户得到的钱是：  节点数 * 100
 	//fmt.Println(len(am.List()))
-	tb.workers[0].allocation(config.Numbers, 100)
+	//tb.workers[0].allocation(config.Numbers, 100)
 	tb.start(config.Time)
 	time.Sleep(3 * time.Second)
 	tb.workers[0].randomtransfer()
