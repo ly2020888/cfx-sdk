@@ -61,13 +61,13 @@ func main() {
 		//client.SetAccountManager(am) //设置对应节点的账号管理器
 		//fmt.Println(len(am.List()))
 		tb.workers = append(tb.workers, Worker{
-			address:    config.Urls[i],
-			rate:       config.Rate,
-			client:     client,
-			sinal:      &tb.sinal,
-//			bulkSender: bulk.NewBulkSender(*client),
-			froms:      make([]cfxaddress.Address, 0),
-			tos:        make([]cfxaddress.Address, 0),
+			address: config.Urls[i],
+			rate:    config.Rate,
+			client:  client,
+			sinal:   &tb.sinal,
+			//			bulkSender: bulk.NewBulkSender(*client),
+			froms: make([]cfxaddress.Address, 0),
+			tos:   make([]cfxaddress.Address, 0),
 		})
 		tb.workers[i].client.SetAccountManager(am)
 	}
@@ -90,7 +90,8 @@ func main() {
 	//挖矿节点有config.Numbers个，然后直接分发金额
 	//一个账号初始化时转给100，那么每个账户得到的钱是：  节点数 * 100
 	//fmt.Println(len(am.List()))
-	//tb.workers[0].allocation(config.Numbers, 100)
+	//	tb.workers[0].allocation(config.Numbers, 100)
+
 	tb.start(config.Time)
 	time.Sleep(3 * time.Second)
 	tb.workers[0].randomtransfer()
