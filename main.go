@@ -104,7 +104,7 @@ func main() {
 	time.Sleep(3 * time.Second)
 	tb.workers[0].randomtransfer()
 
-	//tb.workers[0].GetAllBalance()
+	// tb.workers[0].GetAllBalance()
 }
 
 func (tb *TestBed) start(timeLimit float64) {

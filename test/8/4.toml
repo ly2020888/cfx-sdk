@@ -1,5 +1,5 @@
-bootnodes="cfxnode://58f1d5b7451a877d93361097a0fa05830c65c4dda9bb70e17ad63b9ce38e0519bd2d3ecd7a0d8b4873cf49602e64c2a1997baa2ed3d232041f6a4507591b846e@cfx-1:7001"
-                     
+bootnodes="cfxnode://2ce2fa1843365a29531db5a7ea0188e5b74fcb65bf1b0d0761663e80e254798357c38328153a9dfedfbb08a4d4d76c205b52aeb39839d6621fe636d51571a227@cfx-1:7001"
+                      
 mode = "test"
 #dev_block_interval_ms = 250
 log_conf = "log.yaml"
