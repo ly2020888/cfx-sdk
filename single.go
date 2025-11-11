@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"math/rand"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/Conflux-Chain/go-conflux-sdk/types"
@@ -13,10 +14,20 @@ import (
 
 var single_Transfer *hexutil.Big = (*hexutil.Big)(big.NewInt(BALANCE * CFX1 * 1000)) //1CFX
 var file2, err2 = os.OpenFile(".//single.txt", os.O_WRONLY|os.O_CREATE, 0644)
+var nonceCache = struct {
+	sync.Mutex
+	values map[string]*big.Int
+}{
+	values: make(map[string]*big.Int),
+}
 
-func (worker *Worker) singel_transfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
+func (worker *Worker) wait_single_transfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
 	//开始计时
-
+	// fmt.Println("开始单账户转账测试")
+	intValue := int(value.ToInt().Int64())
+	fmt.Println("what now:", cfx1, cfx2, "transfer value:", intValue)
+	// pk, err := am.Export(cfx1, "")
+	// fmt.Println(pk, err)
 	begin := time.Now()
 	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
 	//nonce, err := worker.client.GetNextUsableNonce(cfx1)
@@ -44,6 +55,37 @@ func (worker *Worker) singel_transfer(cfx1 types.Address, cfx2 types.Address, va
 		fmt.Println(err)
 		//invalidTransactions++
 	}
+	// fmt.Println("单账户转账测试完成")
+}
+
+func (worker *Worker) single_transfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
+	//开始计时
+	// fmt.Println("开始单账户转账测试")
+	intValue := int(value.ToInt().Int64())
+	fmt.Println("what now:", cfx1, cfx2, "transfer value:", intValue)
+	nonce, err := worker.nextNonceFor(cfx1)
+	if err != nil {
+		fmt.Printf("get nonce failed: %v\n", err)
+		return
+	}
+
+	begin := time.Now()
+	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
+	//nonce, err := worker.client.GetNextUsableNonce(cfx1)
+	utx.Nonce.ToInt().Set(nonce)
+	//utx.Nonce = nonce
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+	_, err = worker.client.SendTransaction(utx)
+	if err != nil {
+		fmt.Println(err)
+		invalidTransactions++
+	}
+
+	elapsed := time.Since(begin)
+	worker.pastTime += elapsed.Seconds()
+
 }
 
 func (worker *Worker) randomtransfer() {
@@ -52,7 +94,7 @@ func (worker *Worker) randomtransfer() {
 	//从几号节点开始
 
 	var trans = func(from int, to int) {
-		worker.singel_transfer(lst[from], lst[to], single_Transfer)
+		worker.single_transfer(lst[from], lst[to], single_Transfer)
 		//		log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
 		//	elapsed := time.Since(begin)
 		//	log.Default().Printf("过去%v,  多节点总共完成%d笔交易\n", worker.pastTime, totalCounter)
@@ -60,4 +102,22 @@ func (worker *Worker) randomtransfer() {
 	a := rand.Int() % len(lst)
 	b := rand.Int() % len(lst)
 	trans(a, b)
+}
+
+func (worker *Worker) nextNonceFor(addr types.Address) (*big.Int, error) {
+	key := addr.String()
+	nonceCache.Lock()
+	defer nonceCache.Unlock()
+
+	if cached, ok := nonceCache.values[key]; ok {
+		nonce := new(big.Int).Set(cached)
+		cached.Add(cached, big.NewInt(1))
+		return nonce, nil
+	}
+
+	start := big.NewInt(0)
+	next := new(big.Int).Set(start)
+	next.Add(next, big.NewInt(1))
+	nonceCache.values[key] = next
+	return start, nil
 }

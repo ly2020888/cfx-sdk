@@ -1,15 +1,21 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	sdk "github.com/Conflux-Chain/go-conflux-sdk"
 	"github.com/Conflux-Chain/go-conflux-sdk/types/cfxaddress"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 var (
@@ -18,7 +24,7 @@ var (
 )
 
 const (
-	KEYDIR string = "./keystore"
+	KEYDIR string = "./keytest"
 	//21是燃油费 -> 0.000021CFX
 )
 
@@ -49,7 +55,15 @@ func main() {
 	//fmt.Println(am.Create("hello"))
 
 	am = NewPrivatekeyAccountManager(nil, 1234) //创建账户管理器
-	readAccountToAm()                           //将文件夹内的账户读入
+	// keysToEnsure := []string{
+	// 	"dc780c521c32237b3e44a2f3796d1e0f7ca0fe47d78df321814ee4e8091b4e68",
+	// 	"6b365b5101c63af32b2b65e40467491c885d2b307502719a8242afb2a61f1ab3",
+	// 	"1c7c78b21fd752c5512b15d74ccc5d56b57d23146ba00be702fad07a71461cdc",
+	// }
+	// if err := ensurePrivateKeys(keysToEnsure, "hello"); err != nil {
+	// 	log.Fatalf("导入私钥失败: %v", err)
+	// }
+	readAccountToAm() //将文件夹内的账户读入
 
 	for i := 0; i < config.Numbers; i++ {
 		client, _ := sdk.NewClient(config.Urls[i])
@@ -90,19 +104,43 @@ func main() {
 	//挖矿节点有config.Numbers个，然后直接分发金额
 	//一个账号初始化时转给100，那么每个账户得到的钱是：  节点数 * 100
 	//fmt.Println(len(am.List()))
-	//tb.workers[0].allocation(config.Numbers, 100)
+	// 	dc780c521c32237b3e44a2f3796d1e0f7ca0fe47d78df321814ee4e8091b4e68
+	// 6b365b5101c63af32b2b65e40467491c885d2b307502719a8242afb2a61f1ab3
+	// 1c7c78b21fd752c5512b15d74ccc5d56b57d23146ba00be702fad07a71461cdc
 
-	tb.start(config.Time)
-	time.Sleep(3 * time.Second)
-	tb.workers[0].randomtransfer()
-	time.Sleep(3 * time.Second)
-	tb.workers[0].randomtransfer()
-	time.Sleep(3 * time.Second)
-	tb.workers[0].randomtransfer()
-	time.Sleep(3 * time.Second)
-	tb.workers[0].randomtransfer()
-	time.Sleep(3 * time.Second)
-	tb.workers[0].randomtransfer()
+	// tb.workers[0].allocation(config.Numbers, 100)
+
+	// tb.start(config.Time)
+	// time.Sleep(3 * time.Second)
+	// tb.workers[0].randomtransfer()
+	// time.Sleep(3 * time.Second)
+	// tb.workers[0].randomtransfer()
+	// time.Sleep(3 * time.Second)
+	// tb.workers[0].randomtransfer()
+	// time.Sleep(3 * time.Second)
+	// tb.workers[0].randomtransfer()
+	// time.Sleep(3 * time.Second)
+
+	const totalRuns = 1000
+	const concurrency = 100
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
+	rand.Seed(time.Now().UnixNano())
+	for i := 0; i < totalRuns; i++ {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			idx := 0
+			if len(tb.workers) > 1 {
+				idx = rand.Intn(2)
+			}
+			tb.workers[idx].randomtransfer()
+		}()
+	}
+	wg.Wait()
 
 	//tb.workers[0].GetAllBalance()
 }
@@ -152,4 +190,34 @@ func readAccountToAm() {
 	fmt.Printf("该段代码运行消耗的时间为：%s", elapsed)
 	fmt.Println(len(am.List()))
 
+}
+
+func ensurePrivateKeys(keys []string, passphrase string) error {
+	if err := os.MkdirAll(KEYDIR, 0o700); err != nil {
+		return fmt.Errorf("创建目录失败: %w", err)
+	}
+
+	ks := keystore.NewKeyStore(KEYDIR, keystore.StandardScryptN, keystore.StandardScryptP)
+	for _, key := range keys {
+		cleaned := strings.TrimSpace(key)
+		if cleaned == "" {
+			continue
+		}
+		cleaned = strings.TrimPrefix(cleaned, "0x")
+
+		priv, err := crypto.HexToECDSA(cleaned)
+		if err != nil {
+			return fmt.Errorf("解析私钥失败: %w", err)
+		}
+
+		_, err = ks.ImportECDSA(priv, passphrase)
+		if err != nil {
+			if errors.Is(err, keystore.ErrAccountAlreadyExists) {
+				continue
+			}
+			return fmt.Errorf("导入私钥失败: %w", err)
+		}
+	}
+
+	return nil
 }
