@@ -280,6 +280,12 @@ func startHTTPServer(tb *TestBed) *http.Server {
 
 		log.Printf("start triggered via API with time=%f", timeLimit)
 
+		if err := file.Truncate(0); err != nil {
+			log.Printf("failed to truncate log file: %v", err)
+		} else if _, err := file.Seek(0, 0); err != nil {
+			log.Printf("failed to reset log file cursor: %v", err)
+		}
+
 		go func(limit float64) {
 			tb.start(limit)
 			tb.mu.Lock()

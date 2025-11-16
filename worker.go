@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	sdk "github.com/Conflux-Chain/go-conflux-sdk"
@@ -126,20 +127,13 @@ func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *he
 
 func (worker *Worker) nextNonceFor(addr types.Address) (*big.Int, error) {
 	key := addr.String()
-	nonceCache.Lock()
-	defer nonceCache.Unlock()
-
-	if cached, ok := nonceCache.values[key]; ok {
-		nonce := new(big.Int).Set(cached)
-		cached.Add(cached, big.NewInt(1))
-		return nonce, nil
+	bucket, _ := nonceCounters.LoadOrStore(key, &atomic.Int64{})
+	counter := bucket.(*atomic.Int64)
+	next := counter.Add(1) - 1
+	if next < 0 {
+		return nil, fmt.Errorf("nonce overflow for %s", key)
 	}
-
-	start := big.NewInt(0)
-	next := new(big.Int).Set(start)
-	next.Add(next, big.NewInt(1))
-	nonceCache.values[key] = next
-	return start, nil
+	return big.NewInt(next), nil
 }
 
 func (worker *Worker) transfer2(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {

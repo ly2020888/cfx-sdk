@@ -14,12 +14,7 @@ import (
 
 var single_Transfer *hexutil.Big = (*hexutil.Big)(big.NewInt(BALANCE * CFX1 * 1000)) //1CFX
 var file2, err2 = os.OpenFile(".//single.txt", os.O_WRONLY|os.O_CREATE, 0644)
-var nonceCache = struct {
-	sync.Mutex
-	values map[string]*big.Int
-}{
-	values: make(map[string]*big.Int),
-}
+var nonceCounters sync.Map // key: account hex string, value: *atomic.Int64 maintained in worker.go
 
 func (worker *Worker) wait_single_transfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
 	//开始计时
