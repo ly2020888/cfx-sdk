@@ -103,21 +103,3 @@ func (worker *Worker) randomtransfer() {
 	b := rand.Int() % len(lst)
 	trans(a, b)
 }
-
-func (worker *Worker) nextNonceFor(addr types.Address) (*big.Int, error) {
-	key := addr.String()
-	nonceCache.Lock()
-	defer nonceCache.Unlock()
-
-	if cached, ok := nonceCache.values[key]; ok {
-		nonce := new(big.Int).Set(cached)
-		cached.Add(cached, big.NewInt(1))
-		return nonce, nil
-	}
-
-	start := big.NewInt(0)
-	next := new(big.Int).Set(start)
-	next.Add(next, big.NewInt(1))
-	nonceCache.values[key] = next
-	return start, nil
-}

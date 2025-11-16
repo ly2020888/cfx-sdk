@@ -29,8 +29,6 @@ var invalidTransactions uint = 0
 var onChain uint = 0
 var totalCounter uint = 0
 var mutexTotalCounter sync.Mutex
-var autoNonce *big.Int
-var mutexAtuoNoncer sync.Mutex
 
 type Worker struct {
 	address    string
@@ -51,7 +49,6 @@ func (worker *Worker) unlock() {
 }
 func (worker *Worker) cfxCal(timeLimit float64, startPeer int) int {
 	//worker.client.SetAccountManager(am)
-	autoNonce = big.NewInt(0)
 	res := worker.random_transfer(timeLimit, startPeer)
 	fmt.Println("id: " + worker.address + "     交易次数:  " + strconv.Itoa(res))
 	return res
@@ -94,16 +91,15 @@ func (worker *Worker) updateAccount() {
 func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
 	//开始计时
 
-	//mutexAtuoNoncer.Lock()
-	//autoNonce.Add(autoNonce, big.NewInt(1))
-	//tmp := autoNonce
-	//	atuoNonce++
-	//mutexAtuoNoncer.Unlock()
-
+	nonce, err := worker.nextNonceFor(cfx1)
+	if err != nil {
+		fmt.Printf("get nonce failed: %v\n", err)
+		return
+	}
 	begin := time.Now()
 	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
 	//nonce, err := worker.client.GetNextUsableNonce(cfx1)
-	//	utx.Nonce.ToInt().Set(tmp)
+	utx.Nonce.ToInt().Set(nonce)
 	//utx.Nonce = nonce
 	if err != nil {
 		fmt.Printf("%v", err)
@@ -113,20 +109,28 @@ func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *he
 		fmt.Println(err)
 		invalidTransactions++
 	}
-
 	elapsed := time.Since(begin)
 	worker.pastTime += elapsed.Seconds()
-
-	/*
-	   receipt, err := worker.client.GetTransactionReceipt(txhash)
-	   	if err != nil {
-	   		fmt.Println(err)
-	   	}
-	   	if receipt != nil {
-	   		onChain++
-	   	}
-	*/
 }
+
+func (worker *Worker) nextNonceFor(addr types.Address) (*big.Int, error) {
+	key := addr.String()
+	nonceCache.Lock()
+	defer nonceCache.Unlock()
+
+	if cached, ok := nonceCache.values[key]; ok {
+		nonce := new(big.Int).Set(cached)
+		cached.Add(cached, big.NewInt(1))
+		return nonce, nil
+	}
+
+	start := big.NewInt(0)
+	next := new(big.Int).Set(start)
+	next.Add(next, big.NewInt(1))
+	nonceCache.values[key] = next
+	return start, nil
+}
+
 func (worker *Worker) transfer2(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
 	//开始计时
 
