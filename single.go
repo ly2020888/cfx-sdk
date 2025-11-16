@@ -26,12 +26,18 @@ func (worker *Worker) wait_single_transfer(cfx1 types.Address, cfx2 types.Addres
 	// fmt.Println("开始单账户转账测试")
 	intValue := int(value.ToInt().Int64())
 	fmt.Println("what now:", cfx1, cfx2, "transfer value:", intValue)
-	// pk, err := am.Export(cfx1, "")
-	// fmt.Println(pk, err)
+	nonce, err := worker.nextNonceFor(cfx1)
+	if err != nil {
+		fmt.Printf("get nonce failed: %v\n", err)
+		return
+	}
 	begin := time.Now()
 	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
 	//nonce, err := worker.client.GetNextUsableNonce(cfx1)
-	//	utx.Nonce.ToInt().Set(tmp)
+	if err != nil {
+		fmt.Printf("what utx %v", err)
+	}
+	utx.Nonce.ToInt().Set(nonce)
 	//	utx.Nonce = nonce
 
 	txhash, err := worker.client.SendTransaction(utx)
@@ -39,7 +45,7 @@ func (worker *Worker) wait_single_transfer(cfx1 types.Address, cfx2 types.Addres
 		fmt.Println(err)
 		//invalidTransactions++
 	}
-	receipt, err := worker.client.WaitForTransationReceipt(txhash, 30)
+	receipt, err := worker.client.WaitForTransationReceipt(txhash, 5)
 	if err != nil {
 		fmt.Println(err)
 		//invalidTransactions++
@@ -72,11 +78,12 @@ func (worker *Worker) single_transfer(cfx1 types.Address, cfx2 types.Address, va
 	begin := time.Now()
 	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
 	//nonce, err := worker.client.GetNextUsableNonce(cfx1)
+	if err != nil {
+		fmt.Printf("what utx %v", err)
+	}
 	utx.Nonce.ToInt().Set(nonce)
 	//utx.Nonce = nonce
-	if err != nil {
-		fmt.Printf("%v", err)
-	}
+
 	_, err = worker.client.SendTransaction(utx)
 	if err != nil {
 		fmt.Println(err)
@@ -95,6 +102,22 @@ func (worker *Worker) randomtransfer() {
 
 	var trans = func(from int, to int) {
 		worker.single_transfer(lst[from], lst[to], single_Transfer)
+		//		log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
+		//	elapsed := time.Since(begin)
+		//	log.Default().Printf("过去%v,  多节点总共完成%d笔交易\n", worker.pastTime, totalCounter)
+	}
+	a := rand.Int() % len(lst)
+	b := rand.Int() % len(lst)
+	trans(a, b)
+}
+
+func (worker *Worker) LatencyRandomTransfer() {
+	//打乱账户顺序，交易金额为num
+	lst := am.List()
+	//从几号节点开始
+
+	var trans = func(from int, to int) {
+		worker.wait_single_transfer(lst[from], lst[to], single_Transfer)
 		//		log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
 		//	elapsed := time.Since(begin)
 		//	log.Default().Printf("过去%v,  多节点总共完成%d笔交易\n", worker.pastTime, totalCounter)

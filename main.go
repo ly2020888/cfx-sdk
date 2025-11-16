@@ -1,15 +1,21 @@
 package main
 
 import (
+	stdcontext "context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
+	signalpkg "os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	sdk "github.com/Conflux-Chain/go-conflux-sdk"
@@ -24,8 +30,11 @@ var (
 )
 
 const (
-	KEYDIR string = "./keytest"
-	//21是燃油费 -> 0.000021CFX
+	KEYDIR string = "./keystore"
+
+	// KEYDIR string = "./keytest"
+
+// 21是燃油费 -> 0.000021CFX
 )
 
 type TestBed struct {
@@ -33,6 +42,23 @@ type TestBed struct {
 	workers []Worker
 	sinal   chan int
 	counter int
+	mu      sync.Mutex
+	running bool
+}
+
+type allocationRequest struct {
+	Nodes  *int `json:"nodes"`
+	Amount *int `json:"amount"`
+}
+
+type startRequest struct {
+	Time *float64 `json:"time"`
+}
+
+type latencyRequest struct {
+	Count       *int `json:"count"`
+	IntervalMs  *int `json:"interval_ms"`
+	WorkerIndex *int `json:"worker_index"`
 }
 
 var file, err = os.OpenFile(".//log.txt", os.O_WRONLY|os.O_CREATE, 0644)
@@ -72,7 +98,6 @@ func main() {
 		//以私钥的形式导入
 		//am = NewPrivatekeyAccountManager(nil, 1234)
 		//fmt.Println(am.Import(KEYDIR, "hello", "hello"))
-		//client.SetAccountManager(am) //设置对应节点的账号管理器
 		//fmt.Println(len(am.List()))
 		tb.workers = append(tb.workers, Worker{
 			address: config.Urls[i],
@@ -85,7 +110,6 @@ func main() {
 		})
 		tb.workers[i].client.SetAccountManager(am)
 	}
-
 	/*
 		//测试代码 误删
 		am = NewPrivatekeyAccountManager(nil, 1234)
@@ -95,12 +119,6 @@ func main() {
 		test := (*hexutil.Big)(big.NewInt(1000000000000000))
 		tb.workers[0].tett(am.List()[0], am.List()[1], test)
 	*/
-
-	/*
-		for i := 0; i < len(tb.workers); i++ {
-			tb.workers[i].unlock()
-		}
-	*/
 	//挖矿节点有config.Numbers个，然后直接分发金额
 	//一个账号初始化时转给100，那么每个账户得到的钱是：  节点数 * 100
 	//fmt.Println(len(am.List()))
@@ -108,19 +126,13 @@ func main() {
 	// 6b365b5101c63af32b2b65e40467491c885d2b307502719a8242afb2a61f1ab3
 	// 1c7c78b21fd752c5512b15d74ccc5d56b57d23146ba00be702fad07a71461cdc
 
-	// tb.workers[0].allocation(config.Numbers, 100)
-
 	// tb.start(config.Time)
-	// time.Sleep(3 * time.Second)
-	// tb.workers[0].randomtransfer()
-	// time.Sleep(3 * time.Second)
-	// tb.workers[0].randomtransfer()
-	// time.Sleep(3 * time.Second)
-	// tb.workers[0].randomtransfer()
-	// time.Sleep(3 * time.Second)
-	// tb.workers[0].randomtransfer()
-	// time.Sleep(3 * time.Second)
 
+	srv := startHTTPServer(&tb)
+	waitForShutdown(srv)
+}
+
+func final_single_test(tb *TestBed) {
 	const totalRuns = 1000
 	const concurrency = 100
 	sem := make(chan struct{}, concurrency)
@@ -141,13 +153,12 @@ func main() {
 		}()
 	}
 	wg.Wait()
-
-	//tb.workers[0].GetAllBalance()
 }
 
 func (tb *TestBed) start(timeLimit float64) {
 
 	for i := 0; i < len(tb.workers); i++ {
+		tb.workers[i].resetForRun()
 		log.Default().Printf("worker %d started", i)
 		go tb.workers[i].cfxCal(timeLimit, int(NewConfig().Peers))
 	}
@@ -220,4 +231,274 @@ func ensurePrivateKeys(keys []string, passphrase string) error {
 	}
 
 	return nil
+}
+
+func startHTTPServer(tb *TestBed) *http.Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+
+		if len(tb.workers) == 0 {
+			http.Error(w, "no workers available", http.StatusServiceUnavailable)
+			return
+		}
+
+		payload := startRequest{}
+		if r.Body != nil {
+			defer r.Body.Close()
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&payload); err != nil {
+				if !errors.Is(err, io.EOF) {
+					http.Error(w, fmt.Sprintf("invalid JSON payload: %v", err), http.StatusBadRequest)
+					return
+				}
+			}
+		}
+
+		timeLimit := tb.conf.Time
+		if payload.Time != nil {
+			timeLimit = *payload.Time
+		}
+		if timeLimit <= 0 {
+			http.Error(w, "time must be greater than 0", http.StatusBadRequest)
+			return
+		}
+
+		tb.mu.Lock()
+		if tb.running {
+			tb.mu.Unlock()
+			http.Error(w, "test already running", http.StatusConflict)
+			return
+		}
+		tb.counter = 0
+		tb.running = true
+		tb.mu.Unlock()
+
+		log.Printf("start triggered via API with time=%f", timeLimit)
+
+		go func(limit float64) {
+			tb.start(limit)
+			tb.mu.Lock()
+			tb.running = false
+			tb.mu.Unlock()
+		}(timeLimit)
+
+		response := map[string]interface{}{
+			"status": "started",
+			"time":   timeLimit,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Printf("start response encode error: %v", err)
+		}
+	})
+	mux.HandleFunc("/allocation", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+
+		if len(tb.workers) == 0 {
+			http.Error(w, "no workers available", http.StatusServiceUnavailable)
+			return
+		}
+
+		payload := allocationRequest{}
+		if r.Body != nil {
+			defer r.Body.Close()
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&payload); err != nil {
+				if !errors.Is(err, io.EOF) {
+					http.Error(w, fmt.Sprintf("invalid JSON payload: %v", err), http.StatusBadRequest)
+					return
+				}
+			}
+		}
+
+		nodes := tb.conf.Numbers
+		if payload.Nodes != nil {
+			nodes = *payload.Nodes
+		}
+		if nodes <= 0 {
+			http.Error(w, "nodes must be greater than 0", http.StatusBadRequest)
+			return
+		}
+
+		accounts := am.List()
+		if len(accounts) == 0 {
+			http.Error(w, "no accounts available", http.StatusServiceUnavailable)
+			return
+		}
+		if nodes > len(accounts) {
+			http.Error(w, fmt.Sprintf("nodes exceeds available accounts (%d)", len(accounts)), http.StatusBadRequest)
+			return
+		}
+
+		amount := 100
+		if payload.Amount != nil {
+			amount = *payload.Amount
+		}
+
+		log.Printf("allocation triggered via API with nodes=%d amount=%d", nodes, amount)
+		tb.workers[0].allocation(nodes, amount)
+
+		response := map[string]interface{}{
+			"status": "allocation completed",
+			"nodes":  nodes,
+			"amount": amount,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Printf("allocation response encode error: %v", err)
+		}
+	})
+	mux.HandleFunc("/latency", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+
+		if len(tb.workers) == 0 {
+			http.Error(w, "no workers available", http.StatusServiceUnavailable)
+			return
+		}
+
+		payload := latencyRequest{}
+		if r.Body != nil {
+			defer r.Body.Close()
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&payload); err != nil {
+				if !errors.Is(err, io.EOF) {
+					http.Error(w, fmt.Sprintf("invalid JSON payload: %v", err), http.StatusBadRequest)
+					return
+				}
+			}
+		}
+
+		count := 4
+		if payload.Count != nil {
+			count = *payload.Count
+		}
+		if count <= 0 {
+			http.Error(w, "count must be greater than 0", http.StatusBadRequest)
+			return
+		}
+
+		interval := 3 * time.Second
+		if payload.IntervalMs != nil {
+			if *payload.IntervalMs < 0 {
+				http.Error(w, "interval_ms must be non-negative", http.StatusBadRequest)
+				return
+			}
+			interval = time.Duration(*payload.IntervalMs) * time.Millisecond
+		}
+
+		workerIdx := 0
+		randomWorker := false
+		if payload.WorkerIndex != nil {
+			workerIdx = *payload.WorkerIndex
+		}
+		if workerIdx == -1 {
+			randomWorker = true
+		} else if workerIdx < 0 || workerIdx >= len(tb.workers) {
+			http.Error(w, fmt.Sprintf("worker_index must be between 0 and %d, or -1 for random", len(tb.workers)-1), http.StatusBadRequest)
+			return
+		}
+
+		latencies := make([]float64, 0, count)
+		usedWorkers := make([]int, 0, count)
+		for i := 0; i < count; i++ {
+			selectedIdx := workerIdx
+			if randomWorker {
+				selectedIdx = rand.Intn(len(tb.workers))
+			}
+			start := time.Now()
+			tb.workers[selectedIdx].LatencyRandomTransfer()
+			latency := time.Since(start)
+			latencyMs := float64(latency) / float64(time.Millisecond)
+			latencies = append(latencies, latencyMs)
+			usedWorkers = append(usedWorkers, selectedIdx)
+			log.Printf("latency test iteration %d worker=%d latency=%s", i, selectedIdx, latency)
+			if i < count-1 && interval > 0 {
+				time.Sleep(interval)
+			}
+		}
+
+		average := 0.0
+		for _, latency := range latencies {
+			average += latency
+		}
+		average /= float64(len(latencies))
+
+		response := map[string]interface{}{
+			"status":             "completed",
+			"worker_index":       workerIdx,
+			"count":              count,
+			"interval_ms":        interval / time.Millisecond,
+			"latencies_ms":       latencies,
+			"average_latency_ms": average,
+			"used_workers":       usedWorkers,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Printf("latency response encode error: %v", err)
+		}
+	})
+	mux.HandleFunc("/balances", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+
+		if len(tb.workers) == 0 {
+			http.Error(w, "no workers available", http.StatusServiceUnavailable)
+			return
+		}
+
+		balances := tb.workers[0].GetAllBalance()
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(balances); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
+
+	go func() {
+		log.Printf("HTTP API listening on %s", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("http server stopped: %v", err)
+		}
+	}()
+
+	return srv
+}
+
+func waitForShutdown(srv *http.Server) {
+	stop := make(chan os.Signal, 1)
+	signalpkg.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+
+	ctx, cancel := stdcontext.WithTimeout(stdcontext.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("error shutting down server: %v", err)
+	} else {
+		log.Println("server shut down gracefully")
+	}
 }

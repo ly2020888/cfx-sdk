@@ -17,5 +17,5 @@ urls:
       # - "http://localhost:14016"
 numbers: 2
 rate: 0
-time: 200
+time: 30
 peers: 2

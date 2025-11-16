@@ -41,11 +41,21 @@ type Worker struct {
 	pastTime   float64
 }
 
+type BalanceInfo struct {
+	Index   int    `json:"index"`
+	Address string `json:"address"`
+	Balance int64  `json:"balance"`
+}
+
 func (worker *Worker) unlock() {
 	log.Default().Println("worker is unlocking the accounts")
 	for _, user := range am.List() {
 		worker.client.AccountManager.Unlock(user, "hello")
 	}
+}
+
+func (worker *Worker) resetForRun() {
+	worker.pastTime = 0
 }
 func (worker *Worker) cfxCal(timeLimit float64, startPeer int) int {
 	//worker.client.SetAccountManager(am)
@@ -63,7 +73,7 @@ func (worker *Worker) addToDir(privateKey string) {
 	}
 }
 
-func (worker *Worker) GetBalance(url string, addres types.Address) int {
+func (worker *Worker) GetBalance(url string, addres types.Address) int64 {
 	balance, _ := worker.client.GetBalance(addres)
 	dec, err := hexutil.DecodeBig(balance.String())
 	//为了转换为CFX进行了除以1e3的运算，具体可以输出dec然后对照钱包余额自己推公式
@@ -72,7 +82,7 @@ func (worker *Worker) GetBalance(url string, addres types.Address) int {
 		panic(err)
 	}
 	tmp := dec.Int64()
-	num := int(tmp)
+	num := int64(tmp)
 	//fmt.Println(num)
 	return num
 
@@ -99,11 +109,12 @@ func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *he
 	begin := time.Now()
 	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
 	//nonce, err := worker.client.GetNextUsableNonce(cfx1)
+	if err != nil {
+		fmt.Printf("what utex is nil  %v", err)
+	}
 	utx.Nonce.ToInt().Set(nonce)
 	//utx.Nonce = nonce
-	if err != nil {
-		fmt.Printf("%v", err)
-	}
+
 	_, err = worker.client.SendTransaction(utx)
 	if err != nil {
 		fmt.Println(err)
@@ -132,10 +143,14 @@ func (worker *Worker) nextNonceFor(addr types.Address) (*big.Int, error) {
 }
 
 func (worker *Worker) transfer2(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
-	//开始计时
-
+	nonce, err := worker.nextNonceFor(cfx1)
+	if err != nil {
+		fmt.Printf("get nonce failed: %v\n", err)
+		return
+	}
 	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
-	//nonce, err := worker.client.GetNextUsableNonce(cfx1)
+	utx.Nonce.ToInt().Set(nonce)
+
 	if err != nil {
 		fmt.Printf("%v", err)
 	}
@@ -242,7 +257,7 @@ func (worker *Worker) allocation(num int, money int) {
 		var allo = func(i int) {
 			adtmp := account[i]
 			tmp := worker.GetBalance(worker.address, adtmp)
-			numcfx := tmp / (sz + 5)
+			numcfx := tmp / int64(sz+5)
 			fees := big.NewInt(int64(numcfx * 1000000))
 			fees.Mul(fees, big.NewInt(CFX1))
 
@@ -312,11 +327,17 @@ func (worker *Worker) clearCache() {
 	worker.tos = make([]cfxaddress.Address, 0)
 }
 
-func (worker *Worker) GetAllBalance() {
+func (worker *Worker) GetAllBalance() []BalanceInfo {
 	lst := am.List()
+	balances := make([]BalanceInfo, 0, len(lst))
 	for i := 0; i < len(lst); i++ {
 		num := worker.GetBalance(worker.address, lst[i])
 		log.Printf("账户%d, 目前有%v钱数\n", i, num)
+		balances = append(balances, BalanceInfo{
+			Index:   i,
+			Address: lst[i].String(),
+			Balance: num,
+		})
 	}
-
+	return balances
 }
