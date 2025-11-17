@@ -736,16 +736,17 @@ func (client *Client) CreateUnsignedTransaction(from types.Address, to types.Add
 
 // ApplyUnsignedTransactionDefault set empty fields to value fetched from conflux node.
 func (client *Client) ApplyUnsignedTransactionDefault(tx *types.UnsignedTransaction) error {
+	var networkID uint32 = 1234
+	// networkID, err := client.GetNetworkID()
+	// if err != nil {
+	// 	return errors.Wrap(err, "failed to get networkID")
+	// }
 
-	networkID, err := client.GetNetworkID()
-	if err != nil {
-		return errors.Wrap(err, "failed to get networkID")
-	}
-
-	chainID, err := client.GetChainID()
-	if err != nil {
-		return errors.Wrap(err, "failed to get chainID")
-	}
+	// chainID, err := client.GetChainID()
+	// if err != nil {
+	// 	return errors.Wrap(err, "failed to get chainID")
+	// }
+	var chainID uint32 = 1234
 
 	if client != nil {
 		if tx.From == nil {
@@ -768,14 +769,15 @@ func (client *Client) ApplyUnsignedTransactionDefault(tx *types.UnsignedTransact
 		tx.From.CompleteByNetworkID(networkID)
 		tx.To.CompleteByNetworkID(networkID)
 
-		if tx.Nonce == nil {
-			nonce, err := client.GetNextUsableNonce(*tx.From)
-			if err != nil {
-				return errors.Wrap(err, "failed to get nonce")
-			}
-			tmp := hexutil.Big(*nonce)
-			tx.Nonce = &tmp
-		}
+		// Nonce留在前边补充
+		// if tx.Nonce == nil {
+		// 	nonce, err := client.GetNextUsableNonce(*tx.From)
+		// 	if err != nil {
+		// 		return errors.Wrap(err, "failed to get nonce")
+		// 	}
+		// 	tmp := hexutil.Big(*nonce)
+		// 	tx.Nonce = &tmp
+		// }
 
 		if tx.ChainID == nil {
 			chainID := hexutil.Uint(chainID)
@@ -791,37 +793,38 @@ func (client *Client) ApplyUnsignedTransactionDefault(tx *types.UnsignedTransact
 		}
 
 		// The gas and storage limit may be influnced by all fileds of transaction ,so set them at last step.
-		if tx.StorageLimit == nil || tx.Gas == nil {
-			callReq := new(types.CallRequest)
-			callReq.FillByUnsignedTx(tx)
+		// if tx.StorageLimit == nil || tx.Gas == nil {
+		// 	callReq := new(types.CallRequest)
+		// 	callReq.FillByUnsignedTx(tx)
 
-			sm, err := client.EstimateGasAndCollateral(*callReq)
-			if err != nil {
-				return errors.Wrapf(err, "failed to estimate gas and collateral, request = %+v", *callReq)
-			}
+		// 	sm, err := client.EstimateGasAndCollateral(*callReq)
+		// 	if err != nil {
+		// 		return errors.Wrapf(err, "failed to estimate gas and collateral, request = %+v", *callReq)
+		// 	}
 
-			if tx.Gas == nil {
-				tx.Gas = sm.GasLimit
-			}
+		// 	if tx.Gas == nil {
+		// 		tx.Gas = sm.GasLimit
+		// 	}
 
-			if tx.StorageLimit == nil {
-				tx.StorageLimit = types.NewUint64(sm.StorageCollateralized.ToInt().Uint64() * 10 / 9)
-			}
-		}
+		// 	if tx.StorageLimit == nil {
+		// 		tx.StorageLimit = types.NewUint64(sm.StorageCollateralized.ToInt().Uint64() * 10 / 9)
+		// 	}
+		// }
+		tx.StorageLimit = types.NewUint64(0)
 
-		if tx.GasPrice == nil {
-			gasPrice, err := client.GetGasPrice()
-			if err != nil {
-				return errors.Wrap(err, "failed to get gas price")
-			}
+		// if tx.GasPrice == nil {
+		// 	gasPrice, err := client.GetGasPrice()
+		// 	if err != nil {
+		// 		return errors.Wrap(err, "failed to get gas price")
+		// 	}
 
-			// conflux responsed gasprice offen be 0, but the min gasprice is 1 when sending transaction, so do this
-			if gasPrice.ToInt().Cmp(big.NewInt(constants.MinGasprice)) < 1 {
-				gasPrice = types.NewBigInt(constants.MinGasprice)
-			}
-			tmp := hexutil.Big(*gasPrice)
-			tx.GasPrice = &tmp
-		}
+		// 	// conflux responsed gasprice offen be 0, but the min gasprice is 1 when sending transaction, so do this
+		// 	if gasPrice.ToInt().Cmp(big.NewInt(constants.MinGasprice)) < 1 {
+		// 		gasPrice = types.NewBigInt(constants.MinGasprice)
+		// 	}
+		// 	tmp := hexutil.Big(*gasPrice)
+		// 	tx.GasPrice = &tmp
+		// }
 
 		tx.ApplyDefault()
 	}

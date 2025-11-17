@@ -111,7 +111,7 @@ func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *he
 	if err != nil {
 		fmt.Printf("what utex is nil  %v", err)
 	}
-	utx.Nonce.ToInt().Set(nonce)
+	overwriteTransactionNonce(&utx, nonce)
 	//utx.Nonce = nonce
 
 	_, err = worker.client.SendTransaction(utx)
@@ -146,8 +146,7 @@ func (worker *Worker) transfer2(cfx1 types.Address, cfx2 types.Address, value *h
 		return
 	}
 	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
-	utx.Nonce.ToInt().Set(nonce)
-
+	overwriteTransactionNonce(&utx, nonce)
 	if err != nil {
 		fmt.Printf("%v", err)
 	}
@@ -207,7 +206,7 @@ func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
 	workerRunStart := time.Now()
 	var trans = func(from int, to int) {
 		worker.transfer(subLst[from], subLst[to], singleTransfer)
-		log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
+		// log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
 		total++
 		atomic.AddUint64(&totalCounter, 1)
 		elapsed := time.Since(workerRunStart).Seconds()
@@ -340,4 +339,12 @@ func (worker *Worker) GetAllBalance() []BalanceInfo {
 		})
 	}
 	return balances
+}
+
+func overwriteTransactionNonce(tx *types.UnsignedTransaction, nonce *big.Int) {
+	if tx == nil || nonce == nil {
+		return
+	}
+	tmp := hexutil.Big(*big.NewInt(0).Set(nonce))
+	tx.Nonce = &tmp
 }
