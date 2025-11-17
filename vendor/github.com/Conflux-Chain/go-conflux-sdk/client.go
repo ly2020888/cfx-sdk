@@ -453,6 +453,7 @@ func (client *Client) GetBlockConfirmationRisk(blockHash types.Hash) (*big.Float
 // SendTransaction signs and sends transaction to conflux node and returns the transaction hash.
 func (client *Client) SendTransaction(tx types.UnsignedTransaction) (types.Hash, error) {
 
+	// 在我们的代码逻辑中这部分已经处理过了，不需要重复去请求EpochNumber 产生RPC开销
 	err := client.ApplyUnsignedTransactionDefault(&tx)
 	if err != nil {
 		return "", errors.Wrap(err, errMsgApplyTxValues)
@@ -810,7 +811,9 @@ func (client *Client) ApplyUnsignedTransactionDefault(tx *types.UnsignedTransact
 		// 		tx.StorageLimit = types.NewUint64(sm.StorageCollateralized.ToInt().Uint64() * 10 / 9)
 		// 	}
 		// }
-		tx.StorageLimit = types.NewUint64(0)
+		if tx.StorageLimit == nil {
+			tx.StorageLimit = types.NewUint64(0)
+		}
 
 		// if tx.GasPrice == nil {
 		// 	gasPrice, err := client.GetGasPrice()

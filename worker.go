@@ -206,7 +206,7 @@ func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
 	workerRunStart := time.Now()
 	var trans = func(from int, to int) {
 		worker.transfer(subLst[from], subLst[to], singleTransfer)
-		// log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
+		log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
 		total++
 		atomic.AddUint64(&totalCounter, 1)
 		elapsed := time.Since(workerRunStart).Seconds()
