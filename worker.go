@@ -1,12 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/big"
 	"math/rand"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -27,9 +27,7 @@ const (
 
 var singleTransfer *hexutil.Big = (*hexutil.Big)(big.NewInt(BALANCE * CFX1)) //1CFX
 var invalidTransactions uint = 0
-var onChain uint = 0
-var totalCounter uint = 0
-var mutexTotalCounter sync.Mutex
+var totalCounter uint64 = 0
 
 type Worker struct {
 	address    string
@@ -58,9 +56,9 @@ func (worker *Worker) unlock() {
 func (worker *Worker) resetForRun() {
 	worker.pastTime = 0
 }
-func (worker *Worker) cfxCal(timeLimit float64, startPeer int) int {
+func (worker *Worker) cfxCal(ctx context.Context, startPeer int) int {
 	//worker.client.SetAccountManager(am)
-	res := worker.random_transfer(timeLimit, startPeer)
+	res := worker.random_transfer(ctx, startPeer)
 	fmt.Println("id: " + worker.address + "     交易次数:  " + strconv.Itoa(res))
 	return res
 }
@@ -121,6 +119,11 @@ func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *he
 		fmt.Println(err)
 		invalidTransactions++
 	}
+	// _, err = worker.client.WaitForTransationReceipt(txhash, 5)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	//invalidTransactions++
+	// }
 	elapsed := time.Since(begin)
 	worker.pastTime += elapsed.Seconds()
 }
@@ -188,44 +191,47 @@ func (worker *Worker) BatchTransfer(cfx1 types.Address, cfx2 types.Address, valu
 
 }
 
-func (worker *Worker) random_transfer(timeLimit float64, startPeer int) int {
+func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
 	//打乱账户顺序，交易金额为num
 
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	lst := am.List()
 	//从几号节点开始
 	subLst := make([]types.Address, len(lst)-startPeer)
 	copy(subLst, lst[startPeer:])
 	//对lst实现随机洗牌-打乱顺序
-	rand.Seed(time.Now().UnixNano())
-	// 注意，这行重要，为了使每次洗牌的结果不一样，需要用不同的随机种子，我们这里用精确到微秒的时间戳
-	rand.Shuffle(len(subLst), func(i, j int) {
+	rng.Shuffle(len(subLst), func(i, j int) {
 		subLst[i], subLst[j] = subLst[j], subLst[i]
 	})
 	var total int = 0
-	//	C := time.After(time.Duration(timeLimit) * time.Second)
-	//begin := time.Now()
+	workerRunStart := time.Now()
 	var trans = func(from int, to int) {
 		worker.transfer(subLst[from], subLst[to], singleTransfer)
 		log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
 		total++
-		mutexTotalCounter.Lock()
-		totalCounter++
-		_, err = file.WriteString(fmt.Sprintf("过去%v,  多节点总共完成%d笔交易\n", worker.pastTime, totalCounter))
-		mutexTotalCounter.Unlock()
-		//	elapsed := time.Since(begin)
-		//	log.Default().Printf()
+		atomic.AddUint64(&totalCounter, 1)
+		elapsed := time.Since(workerRunStart).Seconds()
+		_, err = file.WriteString(fmt.Sprintf("ctx过去%f秒, pastTime过去%f秒  多节点总共完成%d笔交易\n", elapsed, worker.pastTime, totalCounter))
 
 	}
 
 	for {
-		if worker.pastTime > timeLimit {
+		select {
+		case <-ctx.Done():
 			*worker.sinal <- int(total)
-			log.Default().Printf("worker exited.")
+			log.Default().Printf("worker exited: %v", ctx.Err())
+			return int(total)
+		default:
+		}
+
+		if len(subLst) == 0 {
+			log.Default().Printf("worker exited: no available accounts")
+			*worker.sinal <- int(total)
 			return int(total)
 		}
 
-		from := rand.Int() % len(subLst)
-		to := rand.Int() % len(subLst)
+		from := rng.Intn(len(subLst))
+		to := rng.Intn(len(subLst))
 		trans(from, to)
 
 	}

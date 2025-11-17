@@ -13,6 +13,7 @@ import (
 	"os"
 	signalpkg "os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -79,7 +80,6 @@ func main() {
 	}
 	//am = NewPrivatekeyAccountManager(nil, 1234)
 	//fmt.Println(am.Create("hello"))
-
 	am = NewPrivatekeyAccountManager(nil, 1234) //创建账户管理器
 	// keysToEnsure := []string{
 	// 	"dc780c521c32237b3e44a2f3796d1e0f7ca0fe47d78df321814ee4e8091b4e68",
@@ -89,8 +89,7 @@ func main() {
 	// if err := ensurePrivateKeys(keysToEnsure, "hello"); err != nil {
 	// 	log.Fatalf("导入私钥失败: %v", err)
 	// }
-	readAccountToAm() //将文件夹内的账户读入
-
+	readAccountToAm(config.Numbers) //将文件夹内的账户读入，优先串行加载关键账户
 	for i := 0; i < config.Numbers; i++ {
 		client, _ := sdk.NewClient(config.Urls[i])
 		log.Default().Printf("%v", config.Urls[i])
@@ -156,13 +155,22 @@ func final_single_test(tb *TestBed) {
 }
 
 func (tb *TestBed) start(timeLimit float64) {
+	if timeLimit <= 0 {
+		timeLimit = 1
+	}
+	duration := time.Duration(timeLimit * float64(time.Second))
+	if duration <= 0 {
+		duration = time.Second
+	}
+	ctx, cancel := stdcontext.WithTimeout(stdcontext.Background(), duration)
+	defer cancel()
+	runStart := time.Now()
 
 	for i := 0; i < len(tb.workers); i++ {
 		tb.workers[i].resetForRun()
 		log.Default().Printf("worker %d started", i)
-		go tb.workers[i].cfxCal(timeLimit, int(NewConfig().Peers))
+		go tb.workers[i].cfxCal(ctx, int(NewConfig().Peers))
 	}
-	//startTime := time.Now()
 
 	totalTransactions := 0
 	for {
@@ -170,13 +178,17 @@ func (tb *TestBed) start(timeLimit float64) {
 		tb.counter++
 		if tb.counter >= len(tb.workers) {
 			log.Default().Printf("全部工人已经执行完工作\n")
-			/*	t := 0.0
-				for i := 0; i < len(tb.workers); i++ {
-					t += float64(tb.workers[i].pastTime)
-				}
-			*/
-			t := timeLimit
-			log.Default().Printf("执行时间%f, 总计交易数量%d,不合法交易数量:%d,Tps:%f,  上链情况:%d\n", t, totalTransactions, invalidTransactions, float64(totalTransactions)/t, onChain)
+			elapsedSeconds := time.Since(runStart).Seconds()
+			if elapsedSeconds <= 0 {
+				elapsedSeconds = duration.Seconds()
+			}
+			log.Default().Printf("执行时间%f(目标%f), 总计交易数量%d,不合法交易数量:%d,Tps:%f",
+				elapsedSeconds,
+				duration.Seconds(),
+				totalTransactions,
+				invalidTransactions,
+				float64(totalTransactions)/elapsedSeconds,
+			)
 			return
 		}
 
@@ -184,7 +196,7 @@ func (tb *TestBed) start(timeLimit float64) {
 
 }
 
-func readAccountToAm() {
+func readAccountToAm(serialCount int) {
 	dir := KEYDIR // 指定目录的路径
 
 	files, err := ioutil.ReadDir(dir)
@@ -192,13 +204,62 @@ func readAccountToAm() {
 		log.Fatal(err)
 	}
 	start := time.Now()
+	serialPaths := make([]string, 0, serialCount)
+	parallelPaths := make([]string, 0, len(files))
 	for _, file := range files {
-		filePath := filepath.Join(dir, file.Name())
-		am.Import(filePath, "hello", "hello")
-		//fmt.Println(am.Import(filePath, "hello", "hello"))
+		if file.IsDir() {
+			continue
+		}
+		path := filepath.Join(dir, file.Name())
+		if serialCount > 0 && len(serialPaths) < serialCount {
+			serialPaths = append(serialPaths, path)
+			continue
+		}
+		parallelPaths = append(parallelPaths, path)
 	}
+
+	for _, path := range serialPaths {
+		if _, err := am.Import(path, "hello", "hello"); err != nil {
+			log.Printf("failed to import %s: %v", path, err)
+		}
+	}
+
+	if len(parallelPaths) == 0 {
+		elapsed := time.Since(start)
+		fmt.Printf("readAccountToAm 该段代码运行消耗的时间为：%s", elapsed)
+		fmt.Println(len(am.List()))
+		return
+	}
+	workers := runtime.NumCPU() / 2
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > len(parallelPaths) {
+		workers = len(parallelPaths)
+	}
+	if workers == 0 {
+		workers = 1
+	}
+	jobs := make(chan string, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for path := range jobs {
+				if _, err := am.Import(path, "hello", "hello"); err != nil {
+					log.Printf("failed to import %s: %v", path, err)
+				}
+			}
+		}()
+	}
+	for _, path := range parallelPaths {
+		jobs <- path
+	}
+	close(jobs)
+	wg.Wait()
 	elapsed := time.Since(start)
-	fmt.Printf("该段代码运行消耗的时间为：%s", elapsed)
+	fmt.Printf("readAccountToAm 该段代码运行消耗的时间为：%s", elapsed)
 	fmt.Println(len(am.List()))
 
 }
