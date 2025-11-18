@@ -79,7 +79,7 @@ func (tx *UnsignedTransaction) Hash() ([]byte, error) {
 	return crypto.Keccak256(encoded), nil
 }
 
-//Encode encodes tx and returns its RLP encoded data
+// Encode encodes tx and returns its RLP encoded data
 func (tx *UnsignedTransaction) Encode() ([]byte, error) {
 	data := *tx.toStructForRlp()
 	encoded, err := rlp.EncodeToBytes(data)

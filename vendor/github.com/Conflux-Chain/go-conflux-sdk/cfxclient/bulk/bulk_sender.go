@@ -1,7 +1,10 @@
 package bulk
 
 import (
+	"fmt"
 	"math/big"
+	"sync"
+	"sync/atomic"
 
 	sdk "github.com/Conflux-Chain/go-conflux-sdk"
 	"github.com/Conflux-Chain/go-conflux-sdk/constants"
@@ -37,6 +40,8 @@ func (b *BulkSender) AppendTransaction(tx *types.UnsignedTransaction) *BulkSende
 // nonceSouce means use pending nonce or nonce be the nonce of first tx not setted nonce.
 // if set NONCE_TYPE_AUTO, it will use nonce when exist pending txs because of notEnoughCash/notEnoughCash/outDatedStatus/outOfEpochHeight/noncefuture
 // and use pending nonce when no pending txs.
+var defaultGas *hexutil.Big = types.NewBigInt(21000)
+
 func (b *BulkSender) PopulateTransactions(nonceSource types.NonceType) ([]*types.UnsignedTransaction, error) {
 	defaultAccount, chainID, networkId, gasPrice, epochHeight, err := b.getChainInfos()
 	if err != nil {
@@ -52,22 +57,21 @@ func (b *BulkSender) PopulateTransactions(nonceSource types.NonceType) ([]*types
 		}
 	}
 
-	estimateErrs, err := b.populateGasAndStorage()
-	if err != nil {
-		return nil, err
-	}
+	// estimateErrs, err := b.populateGasAndStorage()
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	// set nonce
-	userUsedNoncesMap := b.gatherUsedNonces()
-	userNextNonceCache, err := b.gatherInitNextNonces(nonceSource)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	for i, utx := range b.unsignedTxs {
-		if estimateErrs != nil && (*estimateErrs)[i] != nil {
-			continue
-		}
-
+	// userUsedNoncesMap := b.gatherUsedNonces()
+	// userNextNonceCache, err := b.gatherInitNextNonces(nonceSource)
+	// if err != nil {
+	// 	return nil, errors.WithStack(err)
+	// }
+	for _, utx := range b.unsignedTxs {
+		// if estimateErrs != nil && (*estimateErrs)[i] != nil {
+		// 	continue
+		// }
 		utx.From.CompleteByNetworkID(networkId)
 		utx.To.CompleteByNetworkID(networkId)
 
@@ -78,6 +82,8 @@ func (b *BulkSender) PopulateTransactions(nonceSource types.NonceType) ([]*types
 		if utx.GasPrice == nil {
 			utx.GasPrice = gasPrice
 		}
+		utx.StorageLimit = types.NewUint64(0)
+		utx.Gas = defaultGas
 
 		if utx.EpochHeight == nil {
 			utx.EpochHeight = epochHeight
@@ -88,24 +94,29 @@ func (b *BulkSender) PopulateTransactions(nonceSource types.NonceType) ([]*types
 		}
 
 		if utx.Nonce == nil {
-			from := utx.From.String()
-			utx.Nonce = (*hexutil.Big)(userNextNonceCache[from])
-			// avoid to reuse user used nonce, increase it if transactions used the nonce in cache
-			for {
-				userNextNonceCache[from] = big.NewInt(0).Add(userNextNonceCache[from], big.NewInt(1))
-				if !b.checkIsNonceUsed(userUsedNoncesMap, utx.From, (*hexutil.Big)(userNextNonceCache[from])) {
-					break
-				}
+			nonce, err := NextNonceFor(*utx.From)
+			if err != nil {
+				fmt.Printf("get nonce failed: %v\n", err)
+				return nil, err
 			}
+			OverwriteTransactionNonce(utx, nonce)
+			// utx.Nonce = (*hexutil.Big)(userNextNonceCache[from])
+			// // avoid to reuse user used nonce, increase it if transactions used the nonce in cache
+			// for {
+			// 	userNextNonceCache[from] = big.NewInt(0).Add(userNextNonceCache[from], big.NewInt(1))
+			// 	if !b.checkIsNonceUsed(userUsedNoncesMap, utx.From, (*hexutil.Big)(userNextNonceCache[from])) {
+			// 		break
+			// 	}
+			// }
 		}
 	}
 
 	// return results, estimatErrs
 	b.isPopulated = true
-	if estimateErrs != nil {
-		b.bulkEstimateErrors = estimateErrs
-		return b.unsignedTxs, b.bulkEstimateErrors
-	}
+	// if estimateErrs != nil {
+	// 	b.bulkEstimateErrors = estimateErrs
+	// 	return b.unsignedTxs, b.bulkEstimateErrors
+	// }
 	return b.unsignedTxs, nil
 }
 
@@ -303,17 +314,17 @@ func (b *BulkSender) getChainInfos() (
 	}
 
 	bulkCaller := NewBulkCaller(_client)
-	_status, statusErr := bulkCaller.GetStatus()
-	_gasPrice, gasPriceErr := bulkCaller.GetGasPrice()
+	// _status, statusErr := bulkCaller.GetStatus()
+	// _gasPrice, gasPriceErr := bulkCaller.GetGasPrice()
 	_epoch, epochErr := bulkCaller.GetEpochNumber(types.EpochLatestState)
 
 	err = bulkCaller.Execute()
-	if *statusErr != nil {
-		return nil, nil, 0, nil, nil, errors.Wrap(*statusErr, "failed to bulk fetch chain infos")
-	}
-	if *gasPriceErr != nil {
-		return nil, nil, 0, nil, nil, errors.Wrap(*gasPriceErr, "failed to bulk fetch chain infos")
-	}
+	// if *statusErr != nil {
+	// 	return nil, nil, 0, nil, nil, errors.Wrap(*statusErr, "failed to bulk fetch chain infos")
+	// }
+	// if *gasPriceErr != nil {
+	// 	return nil, nil, 0, nil, nil, errors.Wrap(*gasPriceErr, "failed to bulk fetch chain infos")
+	// }
 	if *epochErr != nil {
 		return nil, nil, 0, nil, nil, errors.Wrap(*epochErr, "failed to bulk fetch chain infos")
 	}
@@ -321,16 +332,17 @@ func (b *BulkSender) getChainInfos() (
 		return nil, nil, 0, nil, nil, errors.Wrap(err, "failed to bulk fetch chain infos")
 	}
 
-	_chainID, _networkId := &_status.ChainID, uint32(_status.NetworkID)
+	// _chainID, _networkId := &_status.ChainID, uint32(_status.NetworkID)
+	_chainID := hexutil.Uint(1234)
+	_networkId := uint32(1234)
 	_epochHeight := types.NewUint64(_epoch.ToInt().Uint64())
 
 	// conflux responsed gasprice offen be 0, but the min gasprice is 1 when sending transaction, so do this
-	if _gasPrice.ToInt().Cmp(big.NewInt(constants.MinGasprice)) < 1 {
-		_gasPrice = types.NewBigInt(constants.MinGasprice)
-	}
-
-	chainIDInUint := (hexutil.Uint)(*_chainID)
-	return _defaultAccount, &chainIDInUint, _networkId, _gasPrice, _epochHeight, nil
+	// if _gasPrice.ToInt().Cmp(big.NewInt(constants.MinGasprice)) < 1 {
+	// 	_gasPrice = types.NewBigInt(constants.MinGasprice)
+	// }
+	_gasPrice := types.NewBigInt(constants.MinGasprice)
+	return _defaultAccount, &_chainID, _networkId, _gasPrice, _epochHeight, nil
 }
 
 // Clear clear batch elems and errors in queue for new bulk call action
@@ -384,4 +396,25 @@ func (b *BulkSender) SignAndSend() (txHashes []*types.Hash, txErrors []error, er
 	}
 
 	return hashes, errorVals, err
+}
+
+var nonceCounters sync.Map
+
+func NextNonceFor(addr types.Address) (*big.Int, error) {
+	key := addr.String()
+	bucket, _ := nonceCounters.LoadOrStore(key, &atomic.Int64{})
+	counter := bucket.(*atomic.Int64)
+	next := counter.Add(1) - 1
+	if next < 0 {
+		return nil, fmt.Errorf("nonce overflow for %s", key)
+	}
+	return big.NewInt(next), nil
+}
+
+func OverwriteTransactionNonce(tx *types.UnsignedTransaction, nonce *big.Int) {
+	if tx == nil || nonce == nil {
+		return
+	}
+	tmp := hexutil.Big(*big.NewInt(0).Set(nonce))
+	tx.Nonce = &tmp
 }

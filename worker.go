@@ -21,7 +21,7 @@ const (
 	DEBUG       int   = 1
 	CFX1        int64 = 1e18 / 1e6 //(1CFX / 1e6) 为单位
 	CONCURRENCY int   = 20
-	BATCHSIZE   int   = 200
+	BATCHSIZE   int   = 100
 	BALANCE     int64 = 21
 )
 
@@ -100,7 +100,7 @@ func (worker *Worker) updateAccount() {
 func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
 	//开始计时
 
-	nonce, err := worker.nextNonceFor(cfx1)
+	nonce, err := bulk.NextNonceFor(cfx1)
 	if err != nil {
 		fmt.Printf("get nonce failed: %v\n", err)
 		return
@@ -111,7 +111,7 @@ func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *he
 	if err != nil {
 		fmt.Printf("what utex is nil  %v", err)
 	}
-	overwriteTransactionNonce(&utx, nonce)
+	bulk.OverwriteTransactionNonce(&utx, nonce)
 	//utx.Nonce = nonce
 
 	_, err = worker.client.SendTransaction(utx)
@@ -128,25 +128,14 @@ func (worker *Worker) transfer(cfx1 types.Address, cfx2 types.Address, value *he
 	worker.pastTime += elapsed.Seconds()
 }
 
-func (worker *Worker) nextNonceFor(addr types.Address) (*big.Int, error) {
-	key := addr.String()
-	bucket, _ := nonceCounters.LoadOrStore(key, &atomic.Int64{})
-	counter := bucket.(*atomic.Int64)
-	next := counter.Add(1) - 1
-	if next < 0 {
-		return nil, fmt.Errorf("nonce overflow for %s", key)
-	}
-	return big.NewInt(next), nil
-}
-
 func (worker *Worker) transfer2(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
-	nonce, err := worker.nextNonceFor(cfx1)
+	nonce, err := bulk.NextNonceFor(cfx1)
 	if err != nil {
 		fmt.Printf("get nonce failed: %v\n", err)
 		return
 	}
 	utx, err := worker.client.CreateUnsignedTransaction(cfx1, cfx2, value, nil) //from, err := client.AccountManger()
-	overwriteTransactionNonce(&utx, nonce)
+	bulk.OverwriteTransactionNonce(&utx, nonce)
 	if err != nil {
 		fmt.Printf("%v", err)
 	}
@@ -184,18 +173,18 @@ func (worker *Worker) flushBatchTransactions(value *hexutil.Big) error {
 	}
 
 	for i := 0; i < len(worker.froms); i++ {
-		nonce, err := worker.nextNonceFor(worker.froms[i])
-		if err != nil {
-			return fmt.Errorf("get nonce failed: %w", err)
-		}
+		// nonce, err := nextNonceFor(worker.froms[i])
+		// if err != nil {
+		// 	return fmt.Errorf("get nonce failed: %w", err)
+		// }
 
-		utx, err := worker.client.CreateUnsignedTransaction(worker.froms[i], worker.tos[i], value, nil)
+		utx, err := worker.client.TestCreateUnsignedTransaction(worker.froms[i], worker.tos[i], value, nil)
 		if err != nil {
 			log.Default().Printf("create unsigned tx failed for %v -> %v: %v", worker.froms[i], worker.tos[i], err)
 			continue
 		}
 
-		overwriteTransactionNonce(&utx, nonce)
+		// overwriteTransactionNonce(&utx, nonce)
 		tx := utx // avoid taking address of loop variable
 		worker.bulkSender.AppendTransaction(&tx)
 	}
@@ -209,9 +198,10 @@ func (worker *Worker) flushBatchTransactions(value *hexutil.Big) error {
 	for i := 0; i < len(hashes); i++ {
 		if errors[i] != nil {
 			log.Default().Printf("sign and send the %vth tx error %v\n", i, errors[i])
-		} else {
-			log.Default().Printf("the %vth tx hash %v\n", i, hashes[i])
 		}
+		// else {
+		// 	log.Default().Printf("the %vth tx hash %v\n", i, hashes[i])
+		// }
 	}
 
 	worker.clearCache()
@@ -223,22 +213,32 @@ func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	lst := am.List()
-	//从几号节点开始
-	subLst := make([]types.Address, len(lst)-startPeer)
-	copy(subLst, lst[startPeer:])
-	//对lst实现随机洗牌-打乱顺序
-	rng.Shuffle(len(subLst), func(i, j int) {
-		subLst[i], subLst[j] = subLst[j], subLst[i]
-	})
+	if startPeer >= len(lst) {
+		log.Default().Printf("worker exited: startPeer >= account list length")
+		return 0
+	}
+	// 直接复用共享 slice，避免每个 worker 复制一份完整账户列表
+	subLst := lst[startPeer:]
+	defer func() {
+		subLst = nil // 释放对底层数组的引用，帮助 GC 回收
+	}()
 	var total int = 0
-	workerRunStart := time.Now()
+	// workerRunStart := time.Now()
+	defer func() {
+		// if len(worker.froms) > 0 {
+		// 	if err := worker.flushBatchTransactions(singleTransfer); err != nil {
+		// 		log.Default().Printf("flush left transactions error: %v", err)
+		// 	}
+		// }
+		worker.clearCache()
+	}()
 	var trans = func(from int, to int) {
 		worker.BatchTransfer(subLst[from], subLst[to], singleTransfer)
-		log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
+		// log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
 		total++
 		atomic.AddUint64(&totalCounter, 1)
-		elapsed := time.Since(workerRunStart).Seconds()
-		_, err = file.WriteString(fmt.Sprintf("ctx过去%f秒, pastTime过去%f秒  多节点总共完成%d笔交易\n", elapsed, worker.pastTime, totalCounter))
+		// elapsed := time.Since(workerRunStart).Seconds()
+		// _, err = file.WriteString(fmt.Sprintf("ctx过去%f秒, pastTime过去%f秒  多节点总共完成%d笔交易\n", elapsed, worker.pastTime, totalCounter))
 
 	}
 
@@ -376,12 +376,4 @@ func (worker *Worker) GetAllBalance() []BalanceInfo {
 		})
 	}
 	return balances
-}
-
-func overwriteTransactionNonce(tx *types.UnsignedTransaction, nonce *big.Int) {
-	if tx == nil || nonce == nil {
-		return
-	}
-	tmp := hexutil.Big(*big.NewInt(0).Set(nonce))
-	tx.Nonce = &tmp
 }
