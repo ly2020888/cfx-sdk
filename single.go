@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Conflux-Chain/go-conflux-sdk/cfxclient/bulk"
 	"github.com/Conflux-Chain/go-conflux-sdk/types"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
@@ -22,7 +21,7 @@ func (worker *Worker) wait_single_transfer(cfx1 types.Address, cfx2 types.Addres
 	// fmt.Println("开始单账户转账测试")
 	intValue := int(value.ToInt().Int64())
 	fmt.Println("what now:", cfx1, cfx2, "transfer value:", intValue)
-	nonce, err := bulk.NextNonceFor(cfx1)
+	nonce, err := worker.nextNonceFor(cfx1)
 	if err != nil {
 		fmt.Printf("get nonce failed: %v\n", err)
 		return
@@ -33,9 +32,7 @@ func (worker *Worker) wait_single_transfer(cfx1 types.Address, cfx2 types.Addres
 	if err != nil {
 		fmt.Printf("what utx %v", err)
 	}
-	bulk.OverwriteTransactionNonce(&utx, nonce)
-
-	// utx.Nonce.ToInt().Set(nonce)
+	utx.Nonce.ToInt().Set(nonce)
 	//	utx.Nonce = nonce
 
 	txhash, err := worker.client.SendTransaction(utx)
@@ -67,7 +64,7 @@ func (worker *Worker) single_transfer(cfx1 types.Address, cfx2 types.Address, va
 	// fmt.Println("开始单账户转账测试")
 	intValue := int(value.ToInt().Int64())
 	fmt.Println("what now:", cfx1, cfx2, "transfer value:", intValue)
-	nonce, err := bulk.NextNonceFor(cfx1)
+	nonce, err := worker.nextNonceFor(cfx1)
 	if err != nil {
 		fmt.Printf("get nonce failed: %v\n", err)
 		return
@@ -79,9 +76,7 @@ func (worker *Worker) single_transfer(cfx1 types.Address, cfx2 types.Address, va
 	if err != nil {
 		fmt.Printf("what utx %v", err)
 	}
-	bulk.OverwriteTransactionNonce(&utx, nonce)
-
-	// utx.Nonce.ToInt().Set(nonce)
+	utx.Nonce.ToInt().Set(nonce)
 	//utx.Nonce = nonce
 
 	_, err = worker.client.SendTransaction(utx)

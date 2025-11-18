@@ -735,21 +735,6 @@ func (client *Client) CreateUnsignedTransaction(from types.Address, to types.Add
 	return *tx, nil
 }
 
-func (client *Client) TestCreateUnsignedTransaction(from types.Address, to types.Address, amount *hexutil.Big, data []byte) (types.UnsignedTransaction, error) {
-	tx := new(types.UnsignedTransaction)
-	tx.From = &from
-	tx.To = &to
-	tx.Value = amount
-	tx.Data = data
-
-	// err := client.ApplyUnsignedTransactionDefault(tx)
-	// if err != nil {
-	// 	return types.UnsignedTransaction{}, errors.Wrap(err, errMsgApplyTxValues)
-	// }
-
-	return *tx, nil
-}
-
 // ApplyUnsignedTransactionDefault set empty fields to value fetched from conflux node.
 func (client *Client) ApplyUnsignedTransactionDefault(tx *types.UnsignedTransaction) error {
 	var networkID uint32 = 1234
