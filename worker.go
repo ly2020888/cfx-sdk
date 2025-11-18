@@ -18,11 +18,10 @@ import (
 )
 
 const (
-	DEBUG       int   = 1
-	CFX1        int64 = 1e18 / 1e6 //(1CFX / 1e6) 为单位
-	CONCURRENCY int   = 20
-	BATCHSIZE   int   = 100
-	BALANCE     int64 = 21
+	DEBUG     int   = 1
+	CFX1      int64 = 1e18 / 1e6 //(1CFX / 1e6) 为单位
+	BATCHSIZE int   = 25
+	BALANCE   int64 = 21
 )
 
 var singleTransfer *hexutil.Big = (*hexutil.Big)(big.NewInt(BALANCE * CFX1)) //1CFX
@@ -146,17 +145,19 @@ func (worker *Worker) transfer2(cfx1 types.Address, cfx2 types.Address, value *h
 	}
 
 }
-func (worker *Worker) BatchTransfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
+func (worker *Worker) BatchTransfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) error {
 	worker.froms = append(worker.froms, cfx1)
 	worker.tos = append(worker.tos, cfx2)
 
 	if len(worker.froms) < BATCHSIZE {
-		return
+		return nil
 	}
 
 	if err := worker.flushBatchTransactions(value); err != nil {
-		panic(fmt.Sprintf("%+v", err))
+		return err
 	}
+
+	return nil
 }
 
 func (worker *Worker) flushBatchTransactions(value *hexutil.Big) error {
@@ -208,6 +209,17 @@ func (worker *Worker) flushBatchTransactions(value *hexutil.Big) error {
 	return nil
 }
 
+func (worker *Worker) flushPendingTransactions(value *hexutil.Big) {
+	if len(worker.froms) == 0 {
+		return
+	}
+
+	if err := worker.flushBatchTransactions(value); err != nil {
+		log.Default().Printf("flush pending transactions error: %v", err)
+		worker.clearCache()
+	}
+}
+
 func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
 	//打乱账户顺序，交易金额为num
 
@@ -224,16 +236,11 @@ func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
 	}()
 	var total int = 0
 	// workerRunStart := time.Now()
-	defer func() {
-		// if len(worker.froms) > 0 {
-		// 	if err := worker.flushBatchTransactions(singleTransfer); err != nil {
-		// 		log.Default().Printf("flush left transactions error: %v", err)
-		// 	}
-		// }
-		worker.clearCache()
-	}()
+	defer worker.flushPendingTransactions(singleTransfer)
 	var trans = func(from int, to int) {
-		worker.BatchTransfer(subLst[from], subLst[to], singleTransfer)
+		if err := worker.BatchTransfer(subLst[from], subLst[to], singleTransfer); err != nil {
+			log.Default().Printf("flush batch failed: %v", err)
+		}
 		// log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
 		total++
 		atomic.AddUint64(&totalCounter, 1)
@@ -245,6 +252,7 @@ func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
 	for {
 		select {
 		case <-ctx.Done():
+			worker.flushPendingTransactions(singleTransfer)
 			*worker.sinal <- int(total)
 			log.Default().Printf("worker exited: %v", ctx.Err())
 			return int(total)

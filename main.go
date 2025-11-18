@@ -91,8 +91,14 @@ func main() {
 	// 	log.Fatalf("导入私钥失败: %v", err)
 	// }
 	readAccountToAm(config.Numbers) //将文件夹内的账户读入，优先串行加载关键账户
+	clientOpts := sdk.ClientOption{
+		RetryCount:           3,
+		RetryInterval:        2 * time.Second,
+		RequestTimeout:       90 * time.Second,
+		MaxConnectionPerHost: 1024,
+	}
 	for i := 0; i < config.Numbers; i++ {
-		client, err := sdk.NewClient(config.Urls[i])
+		client, err := sdk.NewClient(config.Urls[i], clientOpts)
 		if err != nil {
 			log.Printf("failed to create client for %s: %v", config.Urls[i], err)
 			continue

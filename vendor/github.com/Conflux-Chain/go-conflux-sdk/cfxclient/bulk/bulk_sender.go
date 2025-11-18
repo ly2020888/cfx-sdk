@@ -57,10 +57,10 @@ func (b *BulkSender) PopulateTransactions(nonceSource types.NonceType) ([]*types
 		}
 	}
 
-	// estimateErrs, err := b.populateGasAndStorage()
-	// if err != nil {
-	// 	return nil, err
-	// }
+	estimateErrs, err := b.populateGasAndStorage()
+	if err != nil {
+		return nil, err
+	}
 
 	// set nonce
 	// userUsedNoncesMap := b.gatherUsedNonces()
@@ -68,10 +68,10 @@ func (b *BulkSender) PopulateTransactions(nonceSource types.NonceType) ([]*types
 	// if err != nil {
 	// 	return nil, errors.WithStack(err)
 	// }
-	for _, utx := range b.unsignedTxs {
-		// if estimateErrs != nil && (*estimateErrs)[i] != nil {
-		// 	continue
-		// }
+	for i, utx := range b.unsignedTxs {
+		if estimateErrs != nil && (*estimateErrs)[i] != nil {
+			continue
+		}
 		utx.From.CompleteByNetworkID(networkId)
 		utx.To.CompleteByNetworkID(networkId)
 
@@ -314,17 +314,17 @@ func (b *BulkSender) getChainInfos() (
 	}
 
 	bulkCaller := NewBulkCaller(_client)
-	// _status, statusErr := bulkCaller.GetStatus()
-	// _gasPrice, gasPriceErr := bulkCaller.GetGasPrice()
+	_status, statusErr := bulkCaller.GetStatus()
+	_gasPrice, gasPriceErr := bulkCaller.GetGasPrice()
 	_epoch, epochErr := bulkCaller.GetEpochNumber(types.EpochLatestState)
 
 	err = bulkCaller.Execute()
-	// if *statusErr != nil {
-	// 	return nil, nil, 0, nil, nil, errors.Wrap(*statusErr, "failed to bulk fetch chain infos")
-	// }
-	// if *gasPriceErr != nil {
-	// 	return nil, nil, 0, nil, nil, errors.Wrap(*gasPriceErr, "failed to bulk fetch chain infos")
-	// }
+	if *statusErr != nil {
+		return nil, nil, 0, nil, nil, errors.Wrap(*statusErr, "failed to bulk fetch chain infos")
+	}
+	if *gasPriceErr != nil {
+		return nil, nil, 0, nil, nil, errors.Wrap(*gasPriceErr, "failed to bulk fetch chain infos")
+	}
 	if *epochErr != nil {
 		return nil, nil, 0, nil, nil, errors.Wrap(*epochErr, "failed to bulk fetch chain infos")
 	}
@@ -332,16 +332,16 @@ func (b *BulkSender) getChainInfos() (
 		return nil, nil, 0, nil, nil, errors.Wrap(err, "failed to bulk fetch chain infos")
 	}
 
-	// _chainID, _networkId := &_status.ChainID, uint32(_status.NetworkID)
-	_chainID := hexutil.Uint(1234)
-	_networkId := uint32(1234)
+	_chainID, _networkId := &_status.ChainID, uint32(_status.NetworkID)
+	// _chainID := hexutil.Uint(1234)
+	// _networkId := uint32(1234)
 	_epochHeight := types.NewUint64(_epoch.ToInt().Uint64())
 
 	// conflux responsed gasprice offen be 0, but the min gasprice is 1 when sending transaction, so do this
-	// if _gasPrice.ToInt().Cmp(big.NewInt(constants.MinGasprice)) < 1 {
-	// 	_gasPrice = types.NewBigInt(constants.MinGasprice)
-	// }
-	_gasPrice := types.NewBigInt(constants.MinGasprice)
+	if _gasPrice.ToInt().Cmp(big.NewInt(constants.MinGasprice)) < 1 {
+		_gasPrice = types.NewBigInt(constants.MinGasprice)
+	}
+	// _gasPrice = types.NewBigInt(constants.MinGasprice)
 	return _defaultAccount, &_chainID, _networkId, _gasPrice, _epochHeight, nil
 }
 
