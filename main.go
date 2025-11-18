@@ -20,6 +20,7 @@ import (
 	"time"
 
 	sdk "github.com/Conflux-Chain/go-conflux-sdk"
+	"github.com/Conflux-Chain/go-conflux-sdk/cfxclient/bulk"
 	"github.com/Conflux-Chain/go-conflux-sdk/types/cfxaddress"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -91,23 +92,24 @@ func main() {
 	// }
 	readAccountToAm(config.Numbers) //将文件夹内的账户读入，优先串行加载关键账户
 	for i := 0; i < config.Numbers; i++ {
-		client, _ := sdk.NewClient(config.Urls[i])
+		client, err := sdk.NewClient(config.Urls[i])
+		if err != nil {
+			log.Printf("failed to create client for %s: %v", config.Urls[i], err)
+			continue
+		}
 		log.Default().Printf("%v", config.Urls[i])
-		//am = sdk.NewAccountManager(KEYDIR, 1234)
-		//以私钥的形式导入
-		//am = NewPrivatekeyAccountManager(nil, 1234)
-		//fmt.Println(am.Import(KEYDIR, "hello", "hello"))
-		//fmt.Println(len(am.List()))
-		tb.workers = append(tb.workers, Worker{
+		client.SetAccountManager(am)
+
+		worker := Worker{
 			address: config.Urls[i],
 			rate:    config.Rate,
 			client:  client,
 			sinal:   &tb.sinal,
-			//			bulkSender: bulk.NewBulkSender(*client),
-			froms: make([]cfxaddress.Address, 0),
-			tos:   make([]cfxaddress.Address, 0),
-		})
-		tb.workers[i].client.SetAccountManager(am)
+			froms:   make([]cfxaddress.Address, 0),
+			tos:     make([]cfxaddress.Address, 0),
+		}
+		worker.bulkSender = bulk.NewBulkSender(*client)
+		tb.workers = append(tb.workers, worker)
 	}
 	/*
 		//测试代码 误删

@@ -21,7 +21,7 @@ const (
 	DEBUG       int   = 1
 	CFX1        int64 = 1e18 / 1e6 //(1CFX / 1e6) 为单位
 	CONCURRENCY int   = 20
-	BATCHSIZE   int   = 100
+	BATCHSIZE   int   = 200
 	BALANCE     int64 = 21
 )
 
@@ -158,36 +158,64 @@ func (worker *Worker) transfer2(cfx1 types.Address, cfx2 types.Address, value *h
 
 }
 func (worker *Worker) BatchTransfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
+	worker.froms = append(worker.froms, cfx1)
+	worker.tos = append(worker.tos, cfx2)
 
 	if len(worker.froms) < BATCHSIZE {
-		worker.froms = append(worker.froms, cfx1)
-		worker.tos = append(worker.froms, cfx2)
-	} else {
+		return
+	}
 
-		for i := 0; i < len(worker.froms); i++ {
-			//创建未签名的交易
-			utx, err := worker.client.CreateUnsignedTransaction(worker.froms[i], worker.tos[i], value, nil)
-			if err != nil {
-				continue
-			}
-			worker.bulkSender.AppendTransaction(&utx)
+	if err := worker.flushBatchTransactions(value); err != nil {
+		panic(fmt.Sprintf("%+v", err))
+	}
+}
+
+func (worker *Worker) flushBatchTransactions(value *hexutil.Big) error {
+	if len(worker.froms) == 0 {
+		return nil
+	}
+
+	// ensure bulkSender initialized
+	if worker.bulkSender == nil {
+		if worker.client == nil {
+			return fmt.Errorf("bulkSender nil and client is nil")
 		}
+		worker.bulkSender = bulk.NewBulkSender(*worker.client)
+	}
 
-		worker.clearCache()
-		hashes, errors, err := worker.bulkSender.SignAndSend()
-		worker.froms = make([]cfxaddress.Address, 0)
+	for i := 0; i < len(worker.froms); i++ {
+		nonce, err := worker.nextNonceFor(worker.froms[i])
 		if err != nil {
-			panic(fmt.Sprintf("%+v", err))
+			return fmt.Errorf("get nonce failed: %w", err)
 		}
-		for i := 0; i < len(hashes); i++ {
-			if errors[i] != nil {
-				log.Default().Printf("sign and send the %vth tx error %v\n", i, errors[i])
-			} else {
-				log.Default().Printf("the %vth tx hash %v\n", i, hashes[i])
-			}
+
+		utx, err := worker.client.CreateUnsignedTransaction(worker.froms[i], worker.tos[i], value, nil)
+		if err != nil {
+			log.Default().Printf("create unsigned tx failed for %v -> %v: %v", worker.froms[i], worker.tos[i], err)
+			continue
+		}
+
+		overwriteTransactionNonce(&utx, nonce)
+		tx := utx // avoid taking address of loop variable
+		worker.bulkSender.AppendTransaction(&tx)
+	}
+
+	hashes, errors, err := worker.bulkSender.SignAndSend()
+	worker.bulkSender.Clear()
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < len(hashes); i++ {
+		if errors[i] != nil {
+			log.Default().Printf("sign and send the %vth tx error %v\n", i, errors[i])
+		} else {
+			log.Default().Printf("the %vth tx hash %v\n", i, hashes[i])
 		}
 	}
 
+	worker.clearCache()
+	return nil
 }
 
 func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
@@ -205,7 +233,7 @@ func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
 	var total int = 0
 	workerRunStart := time.Now()
 	var trans = func(from int, to int) {
-		worker.transfer(subLst[from], subLst[to], singleTransfer)
+		worker.BatchTransfer(subLst[from], subLst[to], singleTransfer)
 		log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
 		total++
 		atomic.AddUint64(&totalCounter, 1)
@@ -324,6 +352,15 @@ func (worker *Worker) allocation(num int, money int) {
 func (worker *Worker) clearCache() {
 	worker.froms = make([]cfxaddress.Address, 0)
 	worker.tos = make([]cfxaddress.Address, 0)
+}
+
+func cloneHexutilBig(value *hexutil.Big) *hexutil.Big {
+	if value == nil {
+		return nil
+	}
+	copyInt := new(big.Int).Set(value.ToInt())
+	cloned := hexutil.Big(*copyInt)
+	return &cloned
 }
 
 func (worker *Worker) GetAllBalance() []BalanceInfo {
