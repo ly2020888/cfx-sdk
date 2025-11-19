@@ -19,8 +19,8 @@ var nonceCounters sync.Map // key: account hex string, value: *atomic.Int64 main
 func (worker *Worker) wait_single_transfer(cfx1 types.Address, cfx2 types.Address, value *hexutil.Big) {
 	//开始计时
 	// fmt.Println("开始单账户转账测试")
-	intValue := int(value.ToInt().Int64())
-	fmt.Println("what now:", cfx1, cfx2, "transfer value:", intValue)
+	// intValue := int(value.ToInt().Int64())
+	// fmt.Println("what now:", cfx1, cfx2, "transfer value:", intValue)
 	nonce, err := worker.nextNonceFor(cfx1)
 	if err != nil {
 		fmt.Printf("get nonce failed: %v\n", err)
@@ -32,8 +32,9 @@ func (worker *Worker) wait_single_transfer(cfx1 types.Address, cfx2 types.Addres
 	if err != nil {
 		fmt.Printf("what utx %v", err)
 	}
-	utx.Nonce.ToInt().Set(nonce)
+	// utx.Nonce.ToInt().Set(nonce)
 	//	utx.Nonce = nonce
+	overwriteTransactionNonce(&utx, nonce)
 
 	txhash, err := worker.client.SendTransaction(utx)
 	if err != nil {
@@ -53,8 +54,9 @@ func (worker *Worker) wait_single_transfer(cfx1 types.Address, cfx2 types.Addres
 	}
 	_, err = file2.WriteString(fmt.Sprintf("过去%v,  完成1笔交易\n", elapsed))
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("file error", err)
 		//invalidTransactions++
+		return
 	}
 	// fmt.Println("单账户转账测试完成")
 }
@@ -76,8 +78,9 @@ func (worker *Worker) single_transfer(cfx1 types.Address, cfx2 types.Address, va
 	if err != nil {
 		fmt.Printf("what utx %v", err)
 	}
-	utx.Nonce.ToInt().Set(nonce)
+	// utx.Nonce.ToInt().Set(nonce)
 	//utx.Nonce = nonce
+	overwriteTransactionNonce(&utx, nonce)
 
 	_, err = worker.client.SendTransaction(utx)
 	if err != nil {

@@ -252,6 +252,10 @@ func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
 		atomic.AddUint64(&totalCounter, 1)
 		elapsed := time.Since(workerRunStart).Seconds()
 		_, err = file.WriteString(fmt.Sprintf("ctx过去%f秒, pastTime过去%f秒  多节点总共完成%d笔交易\n", elapsed, worker.pastTime, totalCounter))
+		if err != nil {
+			fmt.Println("file error", err)
+			return
+		}
 
 	}
 
