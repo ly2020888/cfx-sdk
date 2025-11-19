@@ -21,7 +21,7 @@ const (
 	DEBUG       int   = 1
 	CFX1        int64 = 1e18 / 1e6 //(1CFX / 1e6) 为单位
 	CONCURRENCY int   = 20
-	BATCHSIZE   int   = 200
+	BATCHSIZE   int   = 100
 	BALANCE     int64 = 21
 )
 
@@ -191,7 +191,7 @@ func (worker *Worker) flushBatchTransactions(value *hexutil.Big) error {
 			return fmt.Errorf("get nonce failed: %w", err)
 		}
 
-		utx, err := worker.client.CreateUnsignedTransaction(worker.froms[i], worker.tos[i], value, nil)
+		utx, err := worker.client.BatchCreateUnsignedTransaction(worker.froms[i], worker.tos[i], value, nil)
 		if err != nil {
 			log.Default().Printf("create unsigned tx failed for %v -> %v: %v", worker.froms[i], worker.tos[i], err)
 			continue
