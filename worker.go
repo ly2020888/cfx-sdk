@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"math/rand"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -219,9 +220,10 @@ func (worker *Worker) flushBatchTransactions(value *hexutil.Big) error {
 	for i := 0; i < len(hashes); i++ {
 		if errors[i] != nil {
 			log.Default().Printf("sign and send the %vth tx error %v\n", i, errors[i])
-		} else {
-			log.Default().Printf("the %vth tx hash %v\n", i, hashes[i])
 		}
+		// else {
+		// 	log.Default().Printf("the %vth tx hash %v\n", i, hashes[i])
+		// }
 	}
 
 	worker.clearCache()
@@ -305,6 +307,24 @@ func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
 }
 
 // 账户的金额分配
+var originAccounts = []string{
+	"0x13bde97788d306ebe99962a24955c6fb59f342d0",
+	"0x13fc84cfd7165b0ea1daf58aa36e7945946a0b14",
+	"0x1845d8b71dbd4f7fe91a0cfaecf6f65cea7a0bd1",
+	"0x1210f236cb4cccc615bfd89a55bc71f8313c7e3c",
+	"0x1e77b924efe10e49c7e9d9989adedfe41c8f2d38",
+	"0x1ea7f70536cf17893f592333ca6372cf1d643894",
+	"0x1e94a0c9ac8e228316d6b36eb981d7bbc0ea44ee",
+	"0x1ebfeac86d8e997f768547a189fc30dc4b1b4dee",
+	"0x192606dc2c1df166df7c3832b4f72c30e122a96b",
+	"0x1f3f2e2abcc09653e3b03be9428f19f25472f38b",
+	"0x1689bda46ea32e21f8d3e2a4affef6cdcff07fb7",
+	"0x14286a8f9feac5255c9df9d530957fd3f8a5c03f",
+	"0x1e5c08a60d1f3e609ef7321317e7bf96df8f6f7c",
+	"0x1ed3a05dc9d798572927761076fa2fee7fcd73dc",
+	"0x17f24a9d4c8aeea8d643c40315fac4d9446181b9",
+	"0x166f85ea1ca7145f6355825d47ef531703d3a6ec",
+}
 
 func (worker *Worker) allocation(num int, money int) {
 	//几个节点-num就是几
@@ -312,12 +332,36 @@ func (worker *Worker) allocation(num int, money int) {
 	//	worker.client.SetAccountManager(am)
 
 	all := am.List()
+	if len(all) == 0 {
+		log.Default().Println("allocation aborted: no accounts loaded")
+		return
+	}
+	originSet := make(map[string]struct{}, len(originAccounts))
+	for _, addr := range originAccounts[:num] {
+		originSet[strings.ToLower(addr)] = struct{}{}
+	}
+
+	var lst []types.Address
+	var account []types.Address
+	for _, addr := range all {
+		common := strings.ToLower(addr.MustGetCommonAddress().String())
+		if _, ok := originSet[common]; ok {
+			account = append(account, addr)
+		} else {
+			lst = append(lst, addr)
+		}
+	}
+	if len(account) == 0 {
+		log.Default().Println("allocation aborted: no origin accounts matched")
+		return
+	}
+	if len(lst) == 0 {
+		log.Default().Println("allocation aborted: no target accounts available")
+		return
+	}
+	sz := len(lst)
+
 	if money == -1 {
-		lst := make([]types.Address, len(all)-num)
-		copy(lst, all[num:]) //要分发钱的账户
-		account := make([]types.Address, num)
-		copy(account, all[:num])
-		sz := len(lst)
 
 		var sinal chan int = make(chan int, 1)
 
@@ -352,11 +396,6 @@ func (worker *Worker) allocation(num int, money int) {
 			}
 		}
 	} else {
-		lst := make([]types.Address, len(all)-num)
-		copy(lst, all[num:]) //要分发钱的账户
-		account := make([]types.Address, num)
-		copy(account, all[:num])
-		sz := len(lst)
 
 		var sinal chan int = make(chan int, 1)
 

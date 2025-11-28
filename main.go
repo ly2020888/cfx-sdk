@@ -92,6 +92,10 @@ func main() {
 	// 	log.Fatalf("导入私钥失败: %v", err)
 	// }
 	readAccountToAm(config.Numbers) //将文件夹内的账户读入，优先串行加载关键账户
+	// all := am.List()
+	// for idx, addr := range all {
+	// 	log.Default().Printf("account[%d] id %s", idx, addr.MustGetCommonAddress())
+	// }
 	accountShards := shardAccounts(am.List(), config.Numbers)
 	clientOpts := sdk.ClientOption{
 		RetryCount:           3,
