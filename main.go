@@ -21,6 +21,7 @@ import (
 
 	sdk "github.com/Conflux-Chain/go-conflux-sdk"
 	"github.com/Conflux-Chain/go-conflux-sdk/cfxclient/bulk"
+	"github.com/Conflux-Chain/go-conflux-sdk/types"
 	"github.com/Conflux-Chain/go-conflux-sdk/types/cfxaddress"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -91,6 +92,7 @@ func main() {
 	// 	log.Fatalf("导入私钥失败: %v", err)
 	// }
 	readAccountToAm(config.Numbers) //将文件夹内的账户读入，优先串行加载关键账户
+	accountShards := shardAccounts(am.List(), config.Numbers)
 	clientOpts := sdk.ClientOption{
 		RetryCount:           3,
 		RetryInterval:        2 * time.Second,
@@ -107,13 +109,15 @@ func main() {
 		client.SetAccountManager(am)
 
 		worker := Worker{
-			address: config.Urls[i],
-			rate:    config.Rate,
-			client:  client,
-			sinal:   &tb.sinal,
-			froms:   make([]cfxaddress.Address, 0),
-			tos:     make([]cfxaddress.Address, 0),
+			address:  config.Urls[i],
+			rate:     config.Rate,
+			client:   client,
+			sinal:    &tb.sinal,
+			accounts: accountShards[i],
+			froms:    make([]cfxaddress.Address, 0),
+			tos:      make([]cfxaddress.Address, 0),
 		}
+		fmt.Println("now worker", i, "has accounts:", len(worker.accounts))
 		worker.bulkSender = bulk.NewBulkSender(*client)
 		tb.workers = append(tb.workers, worker)
 	}
@@ -202,6 +206,21 @@ func (tb *TestBed) start(timeLimit float64) {
 
 	}
 
+}
+
+func shardAccounts(accounts []types.Address, shardCount int) [][]types.Address {
+	if shardCount <= 0 {
+		return nil
+	}
+	shards := make([][]types.Address, shardCount)
+	if len(accounts) == 0 {
+		return shards
+	}
+	for i, addr := range accounts {
+		idx := i % shardCount
+		shards[idx] = append(shards[idx], addr)
+	}
+	return shards
 }
 
 func readAccountToAm(serialCount int) {
@@ -405,17 +424,7 @@ func startHTTPServer(tb *TestBed) *http.Server {
 			return
 		}
 
-		accounts := am.List()
-		if len(accounts) == 0 {
-			http.Error(w, "no accounts available", http.StatusServiceUnavailable)
-			return
-		}
-		if nodes > len(accounts) {
-			http.Error(w, fmt.Sprintf("nodes exceeds available accounts (%d)", len(accounts)), http.StatusBadRequest)
-			return
-		}
-
-		amount := 100
+		amount := 50
 		if payload.Amount != nil {
 			amount = *payload.Amount
 		}

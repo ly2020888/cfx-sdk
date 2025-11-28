@@ -34,6 +34,7 @@ type Worker struct {
 	rate       int
 	client     *sdk.Client
 	sinal      *chan int
+	accounts   []types.Address
 	froms      []cfxaddress.Address
 	tos        []cfxaddress.Address
 	bulkSender *bulk.BulkSender
@@ -55,6 +56,13 @@ func (worker *Worker) unlock() {
 
 func (worker *Worker) resetForRun() {
 	worker.pastTime = 0
+}
+
+func (worker *Worker) accountPool() []types.Address {
+	if len(worker.accounts) > 0 {
+		return worker.accounts
+	}
+	return am.List()
 }
 func (worker *Worker) cfxCal(ctx context.Context, startPeer int) int {
 	//worker.client.SetAccountManager(am)
@@ -235,19 +243,32 @@ func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
 	//打乱账户顺序，交易金额为num
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	lst := am.List()
+	lst := worker.accountPool()
+	if len(lst) == 0 {
+		log.Default().Printf("worker exited: no accounts assigned")
+		*worker.sinal <- 0
+		return 0
+	}
+	if startPeer < 0 {
+		startPeer = 0
+	}
+	if startPeer >= len(lst) {
+		log.Default().Printf("worker exited: startPeer %d >= account count %d", startPeer, len(lst))
+		*worker.sinal <- 0
+		return 0
+	}
 	//从几号节点开始
-	subLst := make([]types.Address, len(lst)-startPeer)
-	copy(subLst, lst[startPeer:])
+	// subLst := make([]types.Address, len(lst)-startPeer)
+	// copy(subLst, lst[startPeer:])
 	//对lst实现随机洗牌-打乱顺序
-	rng.Shuffle(len(subLst), func(i, j int) {
-		subLst[i], subLst[j] = subLst[j], subLst[i]
-	})
+	// rng.Shuffle(len(subLst), func(i, j int) {
+	// 	subLst[i], subLst[j] = subLst[j], subLst[i]
+	// })
 	var total int = 0
 	workerRunStart := time.Now()
 	var trans = func(from int, to int) {
-		worker.BatchTransfer(subLst[from], subLst[to], singleTransfer)
-		log.Default().Printf("from %v to %v\n", subLst[from], subLst[to])
+		worker.BatchTransfer(lst[from], lst[to], singleTransfer)
+		log.Default().Printf("from %v to %v\n", lst[from], lst[to])
 		total++
 		atomic.AddUint64(&totalCounter, 1)
 		elapsed := time.Since(workerRunStart).Seconds()
@@ -269,14 +290,14 @@ func (worker *Worker) random_transfer(ctx context.Context, startPeer int) int {
 		default:
 		}
 
-		if len(subLst) == 0 {
+		if len(lst) == 0 {
 			log.Default().Printf("worker exited: no available accounts")
 			*worker.sinal <- int(total)
 			return int(total)
 		}
 
-		from := rng.Intn(len(subLst))
-		to := rng.Intn(len(subLst))
+		from := rng.Intn(len(lst))
+		to := rng.Intn(len(lst))
 		trans(from, to)
 
 	}
@@ -289,12 +310,13 @@ func (worker *Worker) allocation(num int, money int) {
 	//几个节点-num就是几
 	//num : 2 4 8 16
 	//	worker.client.SetAccountManager(am)
+
+	all := am.List()
 	if money == -1 {
-		all := am.List()
 		lst := make([]types.Address, len(all)-num)
 		copy(lst, all[num:]) //要分发钱的账户
 		account := make([]types.Address, num)
-		copy(account, am.List()[:num])
+		copy(account, all[:num])
 		sz := len(lst)
 
 		var sinal chan int = make(chan int, 1)
@@ -330,11 +352,10 @@ func (worker *Worker) allocation(num int, money int) {
 			}
 		}
 	} else {
-		all := am.List()
 		lst := make([]types.Address, len(all)-num)
 		copy(lst, all[num:]) //要分发钱的账户
 		account := make([]types.Address, num)
-		copy(account, am.List()[:num])
+		copy(account, all[:num])
 		sz := len(lst)
 
 		var sinal chan int = make(chan int, 1)

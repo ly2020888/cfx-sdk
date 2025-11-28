@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math/big"
 	"math/rand"
 	"os"
@@ -95,7 +96,11 @@ func (worker *Worker) single_transfer(cfx1 types.Address, cfx2 types.Address, va
 
 func (worker *Worker) randomtransfer() {
 	//打乱账户顺序，交易金额为num
-	lst := am.List()
+	lst := worker.accountPool()
+	if len(lst) == 0 {
+		log.Default().Printf("single transfer skipped: no accounts assigned")
+		return
+	}
 	//从几号节点开始
 
 	var trans = func(from int, to int) {
@@ -111,7 +116,11 @@ func (worker *Worker) randomtransfer() {
 
 func (worker *Worker) LatencyRandomTransfer() {
 	//打乱账户顺序，交易金额为num
-	lst := am.List()
+	lst := worker.accountPool()
+	if len(lst) == 0 {
+		log.Default().Printf("latency transfer skipped: no accounts assigned")
+		return
+	}
 	//从几号节点开始
 
 	var trans = func(from int, to int) {
