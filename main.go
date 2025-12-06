@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"math/rand"
 	"net/http"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"github.com/Conflux-Chain/go-conflux-sdk/types"
 	"github.com/Conflux-Chain/go-conflux-sdk/types/cfxaddress"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
@@ -539,6 +541,113 @@ func startHTTPServer(tb *TestBed) *http.Server {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(response); err != nil {
 			log.Printf("latency response encode error: %v", err)
+		}
+	})
+
+	mux.HandleFunc("/single_transfer", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+
+		if len(tb.workers) == 0 {
+			http.Error(w, "no workers available", http.StatusServiceUnavailable)
+			return
+		}
+
+		type singleTransferRequest struct {
+			FromIndex *int `json:"from_index"`
+			ToIndex   *int `json:"to_index"`
+			// FromAddress *string  `json:"from_address"`
+			// ToAddress   *string  `json:"to_address"`
+			AmountCFX *int64 `json:"amount_cfx"`
+		}
+
+		payload := singleTransferRequest{}
+		if r.Body != nil {
+			defer r.Body.Close()
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&payload); err != nil {
+				if !errors.Is(err, io.EOF) {
+					http.Error(w, fmt.Sprintf("invalid JSON payload: %v", err), http.StatusBadRequest)
+					return
+				}
+			}
+		}
+
+		// 默认选择0 work_index工作
+		worker := &tb.workers[0]
+
+		// pick from address
+		var from types.Address
+		if payload.FromIndex != nil {
+			pool := worker.accountPool()
+			if *payload.FromIndex < 0 || *payload.FromIndex >= len(pool) {
+				http.Error(w, "from_index out of range", http.StatusBadRequest)
+				return
+			}
+			from = pool[*payload.FromIndex]
+		} else {
+			// default: use a random account from the worker's pool (or global list)
+			pool := worker.accountPool()
+			if len(pool) == 0 {
+				http.Error(w, "no accounts available to use as from", http.StatusBadRequest)
+				return
+			}
+			from = pool[rand.Intn(len(pool))]
+		}
+
+		// pick to address
+		var to types.Address
+		if payload.ToIndex != nil {
+			all := am.List()
+			if *payload.ToIndex < 0 || *payload.ToIndex >= len(all) {
+				http.Error(w, "to_index out of range", http.StatusBadRequest)
+				return
+			}
+			to = all[*payload.ToIndex]
+		} else {
+			// default: random global account (ensure not same as from if possible)
+			all := am.List()
+			// try to pick different address than 'from'
+			for i := 0; i < 5; i++ {
+				cand := all[rand.Intn(len(all))]
+				if cand.String() != from.String() {
+					to = cand
+					break
+				}
+			}
+		}
+		// amount in CFX -> convert to internal units used by worker
+		amountCFX := int64(1)
+		if payload.AmountCFX != nil {
+			amountCFX = *payload.AmountCFX
+			if amountCFX <= 0 {
+				http.Error(w, "amount_cfx must be positive", http.StatusBadRequest)
+				return
+			}
+		}
+		// convert to micro units then to base unit as worker.allocation does
+		// singleTransfer is a *hexutil.Big, use big.Int math to multiply
+		amtBig := new(big.Int).SetInt64(amountCFX)
+		singleBig := (*big.Int)(singleTransfer)
+		prod := new(big.Int).Mul(amtBig, singleBig)
+		value := (*hexutil.Big)(prod)
+
+		// perform the transfer (single tx)
+		worker.transfer(from, to, value)
+
+		response := map[string]interface{}{
+			"status":     "submitted",
+			"from":       from.String(),
+			"to":         to.String(),
+			"amount_cfx": amountCFX,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Printf("single_transfer response encode error: %v", err)
 		}
 	})
 	mux.HandleFunc("/balances", func(w http.ResponseWriter, r *http.Request) {
