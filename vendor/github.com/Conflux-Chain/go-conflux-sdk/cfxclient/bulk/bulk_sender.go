@@ -4,7 +4,6 @@ import (
 	"math/big"
 
 	sdk "github.com/Conflux-Chain/go-conflux-sdk"
-	"github.com/Conflux-Chain/go-conflux-sdk/constants"
 	"github.com/Conflux-Chain/go-conflux-sdk/types"
 	"github.com/Conflux-Chain/go-conflux-sdk/types/cfxaddress"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -38,18 +37,9 @@ func (b *BulkSender) AppendTransaction(tx *types.UnsignedTransaction) *BulkSende
 // if set NONCE_TYPE_AUTO, it will use nonce when exist pending txs because of notEnoughCash/notEnoughCash/outDatedStatus/outOfEpochHeight/noncefuture
 // and use pending nonce when no pending txs.
 func (b *BulkSender) PopulateTransactions(nonceSource types.NonceType) ([]*types.UnsignedTransaction, error) {
-	defaultAccount, chainID, networkId, gasPrice, epochHeight, err := b.getChainInfos()
+	epochHeight, err := b.getChainInfos()
 	if err != nil {
 		return nil, errors.WithStack(err)
-	}
-	if defaultAccount == nil {
-		return nil, errors.Wrap(err, "failed to pupulate, no account found")
-	}
-
-	for _, utx := range b.unsignedTxs {
-		if utx.From == nil {
-			utx.From = defaultAccount
-		}
 	}
 
 	estimateErrs, err := b.populateGasAndStorage()
@@ -57,26 +47,9 @@ func (b *BulkSender) PopulateTransactions(nonceSource types.NonceType) ([]*types
 		return nil, err
 	}
 
-	// set nonce
-	userUsedNoncesMap := b.gatherUsedNonces()
-	userNextNonceCache, err := b.gatherInitNextNonces(nonceSource)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
 	for i, utx := range b.unsignedTxs {
 		if estimateErrs != nil && (*estimateErrs)[i] != nil {
 			continue
-		}
-
-		utx.From.CompleteByNetworkID(networkId)
-		utx.To.CompleteByNetworkID(networkId)
-
-		if utx.ChainID == nil {
-			utx.ChainID = chainID
-		}
-
-		if utx.GasPrice == nil {
-			utx.GasPrice = gasPrice
 		}
 
 		if utx.EpochHeight == nil {
@@ -87,17 +60,6 @@ func (b *BulkSender) PopulateTransactions(nonceSource types.NonceType) ([]*types
 			utx.Value = types.NewBigInt(0)
 		}
 
-		if utx.Nonce == nil {
-			from := utx.From.String()
-			utx.Nonce = (*hexutil.Big)(userNextNonceCache[from])
-			// avoid to reuse user used nonce, increase it if transactions used the nonce in cache
-			for {
-				userNextNonceCache[from] = big.NewInt(0).Add(userNextNonceCache[from], big.NewInt(1))
-				if !b.checkIsNonceUsed(userUsedNoncesMap, utx.From, (*hexutil.Big)(userNextNonceCache[from])) {
-					break
-				}
-			}
-		}
 	}
 
 	// return results, estimatErrs
@@ -288,49 +250,26 @@ func (b *BulkSender) checkIsNonceUsed(usedCaches map[string]map[string]bool, use
 }
 
 func (b *BulkSender) getChainInfos() (
-	defaultAccount *cfxaddress.Address,
-	chainID *hexutil.Uint,
-	networkId uint32,
-	gasPrice *hexutil.Big,
 	epochHeight *hexutil.Uint64,
 	err error,
 ) {
 	_client := b.signableCaller
 
-	_defaultAccount, err := _client.GetAccountManager().GetDefault()
-	if err != nil {
-		return nil, nil, 0, nil, nil, errors.Wrap(err, "failed to get default account")
-	}
-
 	bulkCaller := NewBulkCaller(_client)
-	_status, statusErr := bulkCaller.GetStatus()
-	_gasPrice, gasPriceErr := bulkCaller.GetGasPrice()
 	_epoch, epochErr := bulkCaller.GetEpochNumber(types.EpochLatestState)
 
 	err = bulkCaller.Execute()
-	if *statusErr != nil {
-		return nil, nil, 0, nil, nil, errors.Wrap(*statusErr, "failed to bulk fetch chain infos")
-	}
-	if *gasPriceErr != nil {
-		return nil, nil, 0, nil, nil, errors.Wrap(*gasPriceErr, "failed to bulk fetch chain infos")
-	}
+
 	if *epochErr != nil {
-		return nil, nil, 0, nil, nil, errors.Wrap(*epochErr, "failed to bulk fetch chain infos")
+		return nil, errors.Wrap(*epochErr, "failed to bulk fetch chain infos")
 	}
 	if err != nil {
-		return nil, nil, 0, nil, nil, errors.Wrap(err, "failed to bulk fetch chain infos")
+		return nil, errors.Wrap(err, "failed to bulk fetch chain infos")
 	}
 
-	_chainID, _networkId := &_status.ChainID, uint32(_status.NetworkID)
 	_epochHeight := types.NewUint64(_epoch.ToInt().Uint64())
 
-	// conflux responsed gasprice offen be 0, but the min gasprice is 1 when sending transaction, so do this
-	if _gasPrice.ToInt().Cmp(big.NewInt(constants.MinGasprice)) < 1 {
-		_gasPrice = types.NewBigInt(constants.MinGasprice)
-	}
-
-	chainIDInUint := (hexutil.Uint)(*_chainID)
-	return _defaultAccount, &chainIDInUint, _networkId, _gasPrice, _epochHeight, nil
+	return _epochHeight, nil
 }
 
 // Clear clear batch elems and errors in queue for new bulk call action

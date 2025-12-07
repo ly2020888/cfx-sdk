@@ -22,7 +22,6 @@ session_ip_limits="0,0,0,0"
 min_phase_change_normal_peer_count=1
 #dev_allow_phase_change_without_peer=true
 
-
 mining_author = "0x13bde97788d306ebe99962a24955c6fb59f342d0"
 mining_key = "0xdc780c521c32237b3e44a2f3796d1e0f7ca0fe47d78df321814ee4e8091b4e68"
 genesis_secrets = "./genesis_secret.txt"
